@@ -1,0 +1,19 @@
+# Compiled files
+amazons
+*.o
+*.out
+*.exe
+
+# Editor files
+*.swp
+*.swo
+*~
+.vscode/
+.idea/
+
+# Test files
+test_output.txt
+
+# OS files
+.DS_Store
+Thumbs.db
