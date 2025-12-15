@@ -10,8 +10,8 @@
 using namespace std;
 
 const int BOARD_SIZE = 8;
-const int MAX_DEPTH = 3;
-const int TIME_LIMIT = 2900; // 2.9 seconds for move calculation
+const int MAX_DEPTH = 4;
+const int TIME_LIMIT = 2800; // 2.8 seconds for move calculation
 
 // Direction vectors for queen-like movement (8 directions)
 const int dx[] = {-1, -1, -1, 0, 0, 1, 1, 1};
@@ -211,15 +211,92 @@ public:
         return mobility;
     }
     
-    // Evaluation function combining territory and mobility
+    // Improved evaluation function with multiple factors
     int evaluate() {
         int myTerritory = countTerritory(myColor);
         int oppTerritory = countTerritory(opponentColor);
         int myMobility = countMobility(myColor);
         int oppMobility = countMobility(opponentColor);
         
-        // Weighted evaluation: territory is more important than mobility
-        return (myTerritory - oppTerritory) * 10 + (myMobility - oppMobility);
+        // Count piece positions (centrality bonus)
+        int myCentrality = 0;
+        int oppCentrality = 0;
+        
+        for (int i = 0; i < BOARD_SIZE; i++) {
+            for (int j = 0; j < BOARD_SIZE; j++) {
+                if (board[i][j] == myColor) {
+                    // Bonus for being near center
+                    int distFromCenter = abs(i - 3.5) + abs(j - 3.5);
+                    myCentrality += (7 - distFromCenter);
+                } else if (board[i][j] == opponentColor) {
+                    int distFromCenter = abs(i - 3.5) + abs(j - 3.5);
+                    oppCentrality += (7 - distFromCenter);
+                }
+            }
+        }
+        
+        // Weighted evaluation: territory > mobility > centrality
+        int territoryScore = (myTerritory - oppTerritory) * 10;
+        int mobilityScore = (myMobility - oppMobility) * 2;
+        int centralityScore = (myCentrality - oppCentrality);
+        
+        return territoryScore + mobilityScore + centralityScore;
+    }
+    
+    // Score a move for ordering (higher is better)
+    int scoreMove(const Move& move, int color) {
+        int score = 0;
+        
+        // Prefer moves that control the center
+        int centerDist = abs(move.ex - 3.5) + abs(move.ey - 3.5);
+        score -= centerDist * 2;
+        
+        // Prefer moves that restrict opponent mobility
+        // (arrow placed near opponent pieces)
+        int oppColor = (color == BLACK) ? WHITE : BLACK;
+        for (int i = 0; i < BOARD_SIZE; i++) {
+            for (int j = 0; j < BOARD_SIZE; j++) {
+                if (board[i][j] == oppColor) {
+                    int dist = abs(move.ax - i) + abs(move.ay - j);
+                    if (dist <= 3) {
+                        score += 5;
+                    }
+                }
+            }
+        }
+        
+        return score;
+    }
+    
+    // Generate moves with ordering for better pruning
+    vector<Move> generateOrderedMoves(int color) {
+        vector<Move> moves = generateMoves(color);
+        
+        // For small move counts, ordering overhead isn't worth it
+        if (moves.size() < 50) {
+            return moves;
+        }
+        
+        // Score and sort moves
+        vector<pair<int, Move>> scoredMoves;
+        for (const Move& move : moves) {
+            int score = scoreMove(move, color);
+            scoredMoves.push_back(make_pair(score, move));
+        }
+        
+        // Sort by score descending (best moves first)
+        sort(scoredMoves.begin(), scoredMoves.end(), 
+             [](const pair<int, Move>& a, const pair<int, Move>& b) {
+                 return a.first > b.first;
+             });
+        
+        // Extract moves
+        vector<Move> orderedMoves;
+        for (const auto& sm : scoredMoves) {
+            orderedMoves.push_back(sm.second);
+        }
+        
+        return orderedMoves;
     }
     
     // Alpha-beta negamax search
@@ -233,7 +310,7 @@ public:
             return evaluate();
         }
         
-        vector<Move> moves = generateMoves(color);
+        vector<Move> moves = generateOrderedMoves(color);
         
         // Terminal state check
         if (moves.empty()) {
@@ -270,7 +347,7 @@ public:
     Move findBestMove() {
         startTime = clock();
         
-        vector<Move> moves = generateMoves(myColor);
+        vector<Move> moves = generateOrderedMoves(myColor);
         
         if (moves.empty()) {
             return Move(); // No valid moves
@@ -287,6 +364,8 @@ public:
         for (int depth = 1; depth <= MAX_DEPTH; depth++) {
             int alpha = INT_MIN;
             int beta = INT_MAX;
+            Move depthBestMove = bestMove;
+            int depthBestScore = INT_MIN;
             
             for (const Move& move : moves) {
                 makeMove(move);
@@ -295,9 +374,9 @@ public:
                 
                 undoMove(move, myColor);
                 
-                if (score > bestScore) {
-                    bestScore = score;
-                    bestMove = move;
+                if (score > depthBestScore) {
+                    depthBestScore = score;
+                    depthBestMove = move;
                 }
                 
                 alpha = max(alpha, score);
@@ -306,6 +385,12 @@ public:
                 if ((clock() - startTime) * 1000 / CLOCKS_PER_SEC > TIME_LIMIT) {
                     return bestMove;
                 }
+            }
+            
+            // Update best move if we completed this depth
+            if (depthBestScore > bestScore) {
+                bestScore = depthBestScore;
+                bestMove = depthBestMove;
             }
             
             // Check time for next depth
