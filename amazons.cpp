@@ -5,6 +5,7 @@
 #include <ctime>
 #include <climits>
 #include <cstdlib>
+#include <cmath>
 #include <jsoncpp/json/json.h>
 
 using namespace std;
@@ -153,11 +154,11 @@ public:
         
         int territory = 0;
         
-        // Start flood fill from each piece of the given color
+        // Count all squares reachable by this color using queen moves
         for (int i = 0; i < BOARD_SIZE; i++) {
             for (int j = 0; j < BOARD_SIZE; j++) {
-                if (board[i][j] == color) {
-                    // BFS/DFS to count reachable empty squares
+                if (board[i][j] == color && !visited[i][j]) {
+                    // Use BFS to find all reachable squares
                     vector<pair<int, int>> queue;
                     queue.push_back(make_pair(i, j));
                     visited[i][j] = true;
@@ -168,21 +169,28 @@ public:
                         int x = current.first;
                         int y = current.second;
                         
+                        // Check all 8 queen-move directions
                         for (int dir = 0; dir < 8; dir++) {
                             int nx = x + dx[dir];
                             int ny = y + dy[dir];
                             
+                            // Continue in this direction until blocked
                             while (isValid(nx, ny) && !visited[nx][ny]) {
                                 if (board[nx][ny] == EMPTY) {
                                     visited[nx][ny] = true;
                                     territory++;
                                     queue.push_back(make_pair(nx, ny));
-                                    break; // Only count, don't continue through empty
+                                    // Continue along this direction
+                                    nx += dx[dir];
+                                    ny += dy[dir];
                                 } else if (board[nx][ny] == color) {
+                                    // Another piece of same color - mark visited and add to queue
                                     visited[nx][ny] = true;
+                                    queue.push_back(make_pair(nx, ny));
                                     break;
                                 } else {
-                                    break; // Hit opponent or arrow
+                                    // Hit opponent or arrow - can't continue
+                                    break;
                                 }
                             }
                         }
@@ -225,12 +233,13 @@ public:
         for (int i = 0; i < BOARD_SIZE; i++) {
             for (int j = 0; j < BOARD_SIZE; j++) {
                 if (board[i][j] == myColor) {
-                    // Bonus for being near center
-                    int distFromCenter = abs(i - 3.5) + abs(j - 3.5);
-                    myCentrality += (7 - distFromCenter);
+                    // Bonus for being near center (center is between 3 and 4)
+                    // Distance from center: use distance from center of board
+                    int distFromCenter = abs(i * 2 - 7) + abs(j * 2 - 7);
+                    myCentrality += (14 - distFromCenter);
                 } else if (board[i][j] == opponentColor) {
-                    int distFromCenter = abs(i - 3.5) + abs(j - 3.5);
-                    oppCentrality += (7 - distFromCenter);
+                    int distFromCenter = abs(i * 2 - 7) + abs(j * 2 - 7);
+                    oppCentrality += (14 - distFromCenter);
                 }
             }
         }
@@ -247,9 +256,9 @@ public:
     int scoreMove(const Move& move, int color) {
         int score = 0;
         
-        // Prefer moves that control the center
-        int centerDist = abs(move.ex - 3.5) + abs(move.ey - 3.5);
-        score -= centerDist * 2;
+        // Prefer moves that control the center (center is between 3 and 4)
+        int centerDist = abs(move.ex * 2 - 7) + abs(move.ey * 2 - 7);
+        score -= centerDist;
         
         // Prefer moves that restrict opponent mobility
         // (arrow placed near opponent pieces)

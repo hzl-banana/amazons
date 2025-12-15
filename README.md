@@ -10,8 +10,8 @@ Amazons is a two-player strategy game created by Walter Zamkauska in 1988. It's 
 
 1. **Board**: 8×8 grid with coordinates starting from (0,0) in the top-left
 2. **Pieces**: Each player has 4 Amazons
-   - Black pieces start at: (2,0), (0,2), (5,7), (7,5)
-   - White pieces start at: (5,0), (7,2), (2,7), (0,5)
+   - Black pieces start at: (0,2), (2,0), (5,0), (7,2)
+   - White pieces start at: (0,5), (2,7), (5,7), (7,5)
 3. **Movement**: Each Amazon moves like a chess Queen (8 directions: horizontal, vertical, diagonal)
 4. **Turn Structure**: 
    - Move one Amazon to a new position
