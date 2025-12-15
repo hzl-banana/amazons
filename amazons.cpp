@@ -461,22 +461,22 @@ int main() {
         Json::Value request;
         Json::Value response;
         
-        if (i < root["requests"].size()) {
-            request = root["requests"][i];
+        if ((unsigned int)i < root["requests"].size()) {
+            request = root["requests"][(Json::Value::UInt)i];
         }
-        if (i < root["responses"].size()) {
-            response = root["responses"][i];
+        if ((unsigned int)i < root["responses"].size()) {
+            response = root["responses"][(Json::Value::UInt)i];
         }
         
         if (i % 2 == 0) {
             // Black's turn
             if (!response.isNull() && response.isArray() && response.size() == 6) {
-                int sx = response[0].asInt();
-                int sy = response[1].asInt();
-                int ex = response[2].asInt();
-                int ey = response[3].asInt();
-                int ax = response[4].asInt();
-                int ay = response[5].asInt();
+                int sx = response[(Json::Value::UInt)0].asInt();
+                int sy = response[(Json::Value::UInt)1].asInt();
+                int ex = response[(Json::Value::UInt)2].asInt();
+                int ey = response[(Json::Value::UInt)3].asInt();
+                int ax = response[(Json::Value::UInt)4].asInt();
+                int ay = response[(Json::Value::UInt)5].asInt();
                 
                 if (myColor == BLACK) {
                     // This is my previous move, skip
@@ -488,12 +488,12 @@ int main() {
         } else {
             // White's turn
             if (!request.isNull() && request.isArray() && request.size() == 6) {
-                int sx = request[0].asInt();
-                int sy = request[1].asInt();
-                int ex = request[2].asInt();
-                int ey = request[3].asInt();
-                int ax = request[4].asInt();
-                int ay = request[5].asInt();
+                int sx = request[(Json::Value::UInt)0].asInt();
+                int sy = request[(Json::Value::UInt)1].asInt();
+                int ex = request[(Json::Value::UInt)2].asInt();
+                int ey = request[(Json::Value::UInt)3].asInt();
+                int ax = request[(Json::Value::UInt)4].asInt();
+                int ay = request[(Json::Value::UInt)5].asInt();
                 
                 if (myColor == WHITE) {
                     // This is my previous move, skip
