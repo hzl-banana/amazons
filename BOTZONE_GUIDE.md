@@ -58,13 +58,15 @@ python3 visualize.py
 ## Troubleshooting
 
 ### Compilation Errors
-- Make sure jsoncpp is installed: `sudo apt-get install libjsoncpp-dev`
-- Check C++11 support: `g++ --version`
+- The bot uses conditional compilation to work on both local and Botzone environments
+- Botzone uses `-ljson` (expects `<json/json.h>` path)
+- Local development uses `-ljsoncpp` (expects `<jsoncpp/json/json.h>` path)
+- The code automatically detects the environment via `_BOTZONE_ONLINE` flag
 
 ### Timeout Issues
-- The bot is configured to use 2.8 seconds per move
-- Botzone typically allows 3 seconds
-- If timing out, reduce MAX_DEPTH in the code
+- The bot is configured to use 0.95 seconds per move
+- Botzone requires completion within 1 second
+- If timing out, reduce MAX_DEPTH in the code (currently set to 4)
 
 ### Invalid Move Errors
 - Check that the bot generates valid moves

@@ -46,12 +46,12 @@ This project successfully implements a competitive AI bot for the Amazons (äºšé©
 ```
 Language: C++11
 Search Depth: 4 (iterative deepening)
-Time Limit: 2.8 seconds per move
+Time Limit: 0.95 seconds per move (Botzone requirement)
 Evaluation Weights:
   - Territory: 10x
   - Mobility: 2x
   - Centrality: 1x
-Dependencies: jsoncpp
+Dependencies: jsoncpp (with conditional compilation support)
 ```
 
 ## Files Delivered

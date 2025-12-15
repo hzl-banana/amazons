@@ -30,13 +30,14 @@ Amazons is a two-player strategy game created by Walter Zamkauska in 1988. It's 
 - **Search Algorithm**: 
   - Negamax with alpha-beta pruning
   - Iterative deepening for time management
-  - Time-limited search (2.8 seconds per move)
+  - Time-limited search (0.95 seconds per move for Botzone)
 
 ### AI Strategy
 The bot uses a combination of:
 1. **Territory Control**: Prioritizes controlling larger areas of the board
 2. **Mobility**: Maintains freedom of movement for pieces
 3. **Look-ahead Search**: Uses alpha-beta pruning to search multiple moves ahead efficiently
+4. **Time Management**: Optimized for Botzone's 1-second time limit (uses 0.95 seconds)
 
 ## Building and Running
 

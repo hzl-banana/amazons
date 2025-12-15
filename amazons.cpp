@@ -6,13 +6,19 @@
 #include <climits>
 #include <cstdlib>
 #include <cmath>
+
+// Support both local development and Botzone platform
+#ifdef _BOTZONE_ONLINE
+#include <json/json.h>
+#else
 #include <jsoncpp/json/json.h>
+#endif
 
 using namespace std;
 
 const int BOARD_SIZE = 8;
 const int MAX_DEPTH = 4;
-const int TIME_LIMIT = 2800; // 2.8 seconds for move calculation
+const int TIME_LIMIT = 950; // 0.95 seconds for move calculation (Botzone requires < 1 second)
 
 // Direction vectors for queen-like movement (8 directions)
 const int dx[] = {-1, -1, -1, 0, 0, 1, 1, 1};
