@@ -1,3 +1,9 @@
+#pragma GCC optimize("Ofast")
+#pragma GCC optimize("unroll-loops")
+#pragma GCC optimize("inline")
+#ifdef __AVX2__
+#pragma GCC target("avx2")
+#endif
 #include <iostream>
 #include <vector>
 #include <algorithm>
