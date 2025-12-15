@@ -9,7 +9,7 @@
 
 // Support both local development and Botzone platform
 #ifdef _BOTZONE_ONLINE
-#include <json/json.h>
+#include "jsoncpp/json.h"
 #else
 #include <jsoncpp/json/json.h>
 #endif

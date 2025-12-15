@@ -59,8 +59,8 @@ python3 visualize.py
 
 ### Compilation Errors
 - The bot uses conditional compilation to work on both local and Botzone environments
-- Botzone uses `-ljson` (expects `<json/json.h>` path)
-- Local development uses `-ljsoncpp` (expects `<jsoncpp/json/json.h>` path)
+- Botzone uses `-ljson` (expects `"jsoncpp/json.h"` path with quotes)
+- Local development uses `-ljsoncpp` (expects `<jsoncpp/json/json.h>` path with angle brackets)
 - The code automatically detects the environment via `_BOTZONE_ONLINE` flag
 
 ### Timeout Issues

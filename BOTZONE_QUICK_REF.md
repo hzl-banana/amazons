@@ -8,13 +8,13 @@
 **Solution**: Added conditional compilation in `amazons.cpp`:
 ```cpp
 #ifdef _BOTZONE_ONLINE
-#include <json/json.h>
+#include "jsoncpp/json.h"
 #else
 #include <jsoncpp/json/json.h>
 #endif
 ```
 
-Botzone's compiler automatically defines `_BOTZONE_ONLINE`, so the correct header path is used.
+Botzone's compiler automatically defines `_BOTZONE_ONLINE`, so the correct header path (`"jsoncpp/json.h"` with quotes) is used.
 
 ### ✅ Time Limit Fixed
 **Problem**: Botzone requires moves within 1 second
