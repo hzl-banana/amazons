@@ -1,4 +1,15 @@
-#include <bits/stdc++.h>
+#include <algorithm>
+#include <atomic>
+#include <chrono>
+#include <climits>
+#include <cstring>
+#include <iostream>
+#include <iterator>
+#include <limits>
+#include <memory>
+#include <string>
+#include <utility>
+#include <vector>
 
 #if __has_include(<jsoncpp/json.h>)
 #include <jsoncpp/json.h>
@@ -10,7 +21,18 @@
 #define HAS_JSONCPP 0
 #endif
 
-using namespace std;
+using Clock = std::chrono::steady_clock;
+using std::cin;
+using std::cout;
+using std::endl;
+using std::istreambuf_iterator;
+using std::max;
+using std::min;
+using std::pair;
+using std::sort;
+using std::string;
+using std::unique_ptr;
+using std::vector;
 
 struct Move {
     int sx = -1, sy = -1;
@@ -33,14 +55,20 @@ static const int DIRS[8][2] = {
 struct Board {
     int g[BOARD_SIZE][BOARD_SIZE]{};
 
-    Board() { memset(g, 0, sizeof(g)); }
+    Board() { clear(); }
+
+    void clear() {
+        for (auto &row : g) {
+            std::fill(std::begin(row), std::end(row), EMPTY);
+        }
+    }
 
     static bool inside(int x, int y) {
         return x >= 0 && x < BOARD_SIZE && y >= 0 && y < BOARD_SIZE;
     }
 
     void placeInitial() {
-        memset(g, 0, sizeof(g));
+        clear();
         // First player
         g[0][2] = g[0][5] = g[2][0] = g[2][7] = PLAYER_ONE;
         // Second player
@@ -71,12 +99,12 @@ struct Board {
         for (int x = 0; x < BOARD_SIZE; ++x) {
             for (int y = 0; y < BOARD_SIZE; ++y) {
                 if (g[x][y] != player) continue;
-                for (auto d : DIRS) {
+                for (const auto &d : DIRS) {
                     int nx = x + d[0], ny = y + d[1];
                     while (inside(nx, ny) && g[nx][ny] == EMPTY) {
                         pair<int, int> origin{x, y};
                         pair<int, int> dest{nx, ny};
-                        for (auto a : DIRS) {
+                        for (const auto &a : DIRS) {
                             int ax = nx + a[0], ay = ny + a[1];
                             while (cellFree(ax, ay, origin, dest)) {
                                 Move mv;
@@ -105,12 +133,12 @@ struct Board {
         for (int x = 0; x < BOARD_SIZE; ++x) {
             for (int y = 0; y < BOARD_SIZE; ++y) {
                 if (g[x][y] != player) continue;
-                for (auto d : DIRS) {
+                for (const auto &d : DIRS) {
                     int nx = x + d[0], ny = y + d[1];
                     while (inside(nx, ny) && g[nx][ny] == EMPTY) {
                         pair<int, int> origin{x, y};
                         pair<int, int> dest{nx, ny};
-                        for (auto a : DIRS) {
+                        for (const auto &a : DIRS) {
                             int ax = nx + a[0], ay = ny + a[1];
                             while (cellFree(ax, ay, origin, dest)) {
                                 ++cnt;
@@ -137,22 +165,27 @@ struct ParsedInput {
     bool iAmFirst = true;
 };
 
-static chrono::steady_clock::time_point gStart;
+static Clock::time_point gStart;
 constexpr double TIME_LIMIT_MS = 950.0;  // stay under 1 second
-bool gTimeout = false;
+constexpr int MOBILITY_WEIGHT = 10;
+constexpr int LOSS_SCORE = INT_MIN / 4;
+constexpr int WIN_SCORE = INT_MAX / 4;
+constexpr int NEG_INF = INT_MIN / 2;
+constexpr int POS_INF = INT_MAX / 2;
+std::atomic<bool> gTimeout{false};
 
 bool timeUp() {
-    auto now = chrono::steady_clock::now();
-    auto ms = chrono::duration_cast<chrono::milliseconds>(now - gStart).count();
-    if (ms >= TIME_LIMIT_MS) gTimeout = true;
-    return gTimeout;
+    auto now = Clock::now();
+    auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(now - gStart).count();
+    if (ms >= TIME_LIMIT_MS) gTimeout.store(true);
+    return gTimeout.load();
 }
 
 int evaluate(const Board &b, int myColor) {
     int opp = (myColor == PLAYER_ONE) ? PLAYER_TWO : PLAYER_ONE;
     int myMob = b.countMoves(myColor);
     int oppMob = b.countMoves(opp);
-    return (myMob - oppMob) * 10;
+    return (myMob - oppMob) * MOBILITY_WEIGHT;
 }
 
 int alphabeta(const Board &state, int depth, int alpha, int beta, int player, int myColor, Move &bestMove) {
@@ -162,7 +195,7 @@ int alphabeta(const Board &state, int depth, int alpha, int beta, int player, in
     vector<Move> moves;
     state.generateMoves(player, moves);
     if (moves.empty()) {
-        return (player == myColor) ? INT_MIN / 4 : INT_MAX / 4;
+        return (player == myColor) ? LOSS_SCORE : WIN_SCORE;
     }
 
     // Move ordering: prefer moves that change mobility more.
@@ -175,13 +208,13 @@ int alphabeta(const Board &state, int depth, int alpha, int beta, int player, in
         scored.push_back({sc, m});
     }
     if (player == myColor) {
-        sort(scored.begin(), scored.end(), [](auto &a, auto &b) { return a.first > b.first; });
+        sort(scored.begin(), scored.end(), [](const auto &a, const auto &b) { return a.first > b.first; });
     } else {
-        sort(scored.begin(), scored.end(), [](auto &a, auto &b) { return a.first < b.first; });
+        sort(scored.begin(), scored.end(), [](const auto &a, const auto &b) { return a.first < b.first; });
     }
 
     if (player == myColor) {
-        int value = INT_MIN;
+        int value = NEG_INF;
         for (auto &sm : scored) {
             if (timeUp()) break;
             Board nxt = state;
@@ -198,7 +231,7 @@ int alphabeta(const Board &state, int depth, int alpha, int beta, int player, in
         }
         return value;
     } else {
-        int value = INT_MAX;
+        int value = POS_INF;
         for (auto &sm : scored) {
             if (timeUp()) break;
             Board nxt = state;
@@ -218,8 +251,8 @@ int alphabeta(const Board &state, int depth, int alpha, int beta, int player, in
 }
 
 Move searchBest(const Board &state, int myColor) {
-    gStart = chrono::steady_clock::now();
-    gTimeout = false;
+    gStart = Clock::now();
+    gTimeout.store(false);
     Move globalBest;
     vector<Move> rootMoves;
     state.generateMoves(myColor, rootMoves);
@@ -229,8 +262,8 @@ Move searchBest(const Board &state, int myColor) {
     int depth = 1;
     while (!timeUp()) {
         Move bestThisDepth;
-        alphabeta(state, depth, INT_MIN / 2, INT_MAX / 2, myColor, myColor, bestThisDepth);
-        if (!gTimeout && bestThisDepth.valid) {
+        alphabeta(state, depth, NEG_INF, POS_INF, myColor, myColor, bestThisDepth);
+        if (!gTimeout.load() && bestThisDepth.valid) {
             globalBest = bestThisDepth;
         }
         ++depth;
@@ -238,21 +271,9 @@ Move searchBest(const Board &state, int myColor) {
     return globalBest;
 }
 
-bool extractMoveFromJson(const
 #if HAS_JSONCPP
-    Json::Value &obj,
-#else
-    void * /*unused*/,
-#endif
-    Move &m) {
-#if HAS_JSONCPP
-    auto getCoord = [&](const char *key, bool &found) -> int {
-        if (obj.isObject() && obj.isMember(key)) {
-            found = true;
-            return obj[key].asInt();
-        }
-        return -1;
-    };
+bool extractMoveFromJson(const Json::Value &obj, Move &m) {
+    auto inRange = [](int v) { return v >= 0 && v < BOARD_SIZE; };
 
     if (obj.isNull()) return false;
 
@@ -263,44 +284,60 @@ bool extractMoveFromJson(const
         m.ty = obj[3].asInt();
         m.ax = obj[4].asInt();
         m.ay = obj[5].asInt();
-        m.valid = (m.sx >= 0);
+        m.valid = inRange(m.sx) && inRange(m.sy) && inRange(m.tx) && inRange(m.ty) && inRange(m.ax) && inRange(m.ay);
         return m.valid;
     }
 
-    bool found = false;
-    int sx = getCoord("x0", found);
-    int sy = getCoord("y0", found);
-    int tx = getCoord("x1", found);
-    int ty = getCoord("y1", found);
-    int ax = getCoord("x2", found);
-    int ay = getCoord("y2", found);
-    if (found && sx >= 0 && sy >= 0 && tx >= 0 && ty >= 0 && ax >= 0 && ay >= 0) {
-        m.sx = sx;
-        m.sy = sy;
-        m.tx = tx;
-        m.ty = ty;
-        m.ax = ax;
-        m.ay = ay;
-        m.valid = true;
-        return true;
+    bool hasX0 = obj.isObject() && obj.isMember("x0");
+    bool hasY0 = obj.isObject() && obj.isMember("y0");
+    bool hasX1 = obj.isObject() && obj.isMember("x1");
+    bool hasY1 = obj.isObject() && obj.isMember("y1");
+    bool hasX2 = obj.isObject() && obj.isMember("x2");
+    bool hasY2 = obj.isObject() && obj.isMember("y2");
+    if (hasX0 && hasY0 && hasX1 && hasY1 && hasX2 && hasY2) {
+        int sx = obj["x0"].asInt();
+        int sy = obj["y0"].asInt();
+        int tx = obj["x1"].asInt();
+        int ty = obj["y1"].asInt();
+        int ax = obj["x2"].asInt();
+        int ay = obj["y2"].asInt();
+        if (inRange(sx) && inRange(sy) && inRange(tx) && inRange(ty) && inRange(ax) && inRange(ay)) {
+            m.sx = sx;
+            m.sy = sy;
+            m.tx = tx;
+            m.ty = ty;
+            m.ax = ax;
+            m.ay = ay;
+            m.valid = true;
+            return true;
+        }
     }
 
     if (obj.isMember("from") && obj["from"].isArray() && obj["from"].size() == 2 &&
         obj.isMember("to") && obj["to"].isArray() && obj["to"].size() == 2 &&
         obj.isMember("arrow") && obj["arrow"].isArray() && obj["arrow"].size() == 2) {
-        m.sx = obj["from"][0].asInt();
-        m.sy = obj["from"][1].asInt();
-        m.tx = obj["to"][0].asInt();
-        m.ty = obj["to"][1].asInt();
-        m.ax = obj["arrow"][0].asInt();
-        m.ay = obj["arrow"][1].asInt();
-        m.valid = true;
-        return true;
+        int sx = obj["from"][0].asInt();
+        int sy = obj["from"][1].asInt();
+        int tx = obj["to"][0].asInt();
+        int ty = obj["to"][1].asInt();
+        int ax = obj["arrow"][0].asInt();
+        int ay = obj["arrow"][1].asInt();
+        if (inRange(sx) && inRange(sy) && inRange(tx) && inRange(ty) && inRange(ax) && inRange(ay)) {
+            m.sx = sx;
+            m.sy = sy;
+            m.tx = tx;
+            m.ty = ty;
+            m.ax = ax;
+            m.ay = ay;
+            m.valid = true;
+            return true;
+        }
     }
-#endif
-    (void)m;
     return false;
 }
+#else
+bool extractMoveFromJson(const void *, Move &) { return false; }
+#endif
 
 ParsedInput parseInput(const string &raw) {
     ParsedInput res;
@@ -318,16 +355,16 @@ ParsedInput parseInput(const string &raw) {
 
     const auto &reqs = root["requests"];
     const auto &resps = root["responses"];
-    int turn = reqs.size();
-    res.requests.resize(turn);
-    for (int i = 0; i < turn; ++i) {
+    Json::ArrayIndex turn = reqs.size();
+    res.requests.resize(static_cast<size_t>(turn));
+    for (Json::ArrayIndex i = 0; i < turn; ++i) {
         Move m;
         if (extractMoveFromJson(reqs[i], m)) res.requests[i] = m;
     }
     if (resps.isArray()) {
-        int rsz = resps.size();
-        res.responses.resize(rsz);
-        for (int i = 0; i < rsz; ++i) {
+        Json::ArrayIndex rsz = resps.size();
+        res.responses.resize(static_cast<size_t>(rsz));
+        for (Json::ArrayIndex i = 0; i < rsz; ++i) {
             Move m;
             if (extractMoveFromJson(resps[i], m)) res.responses[i] = m;
         }
@@ -361,7 +398,7 @@ Move fallbackMove(const Board &b, int myColor) {
 }
 
 int main() {
-    ios::sync_with_stdio(false);
+    std::ios::sync_with_stdio(false);
     cin.tie(nullptr);
 
     string rawInput((istreambuf_iterator<char>(cin)), istreambuf_iterator<char>());
