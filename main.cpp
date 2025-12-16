@@ -2,36 +2,21 @@
 #include <atomic>
 #include <chrono>
 #include <climits>
-#include <cstring>
 #include <iostream>
-#include <iterator>
 #include <limits>
-#include <memory>
 #include <string>
 #include <utility>
 #include <vector>
-
-#if __has_include(<jsoncpp/json.h>)
-#include <jsoncpp/json.h>
-#define HAS_JSONCPP 1
-#elif __has_include(<json/json.h>)
-#include <json/json.h>
-#define HAS_JSONCPP 1
-#else
-#define HAS_JSONCPP 0
-#endif
 
 using Clock = std::chrono::steady_clock;
 using std::cin;
 using std::cout;
 using std::endl;
-using std::istreambuf_iterator;
 using std::max;
 using std::min;
 using std::pair;
 using std::sort;
 using std::string;
-using std::unique_ptr;
 using std::vector;
 
 struct Move {
@@ -159,9 +144,6 @@ struct Board {
 
 struct ParsedInput {
     vector<Move> requests;
-    vector<Move> responses;
-    bool hasBoard = false;
-    vector<vector<int>> board;
     bool iAmFirst = true;
 };
 
@@ -271,125 +253,30 @@ Move searchBest(const Board &state, int myColor) {
     return globalBest;
 }
 
-#if HAS_JSONCPP
-bool extractMoveFromJson(const Json::Value &obj, Move &m) {
-    auto inRange = [](int v) { return v >= 0 && v < BOARD_SIZE; };
-
-    if (obj.isNull()) return false;
-
-    if (obj.isArray() && obj.size() >= 6) {
-        m.sx = obj[0].asInt();
-        m.sy = obj[1].asInt();
-        m.tx = obj[2].asInt();
-        m.ty = obj[3].asInt();
-        m.ax = obj[4].asInt();
-        m.ay = obj[5].asInt();
-        m.valid = inRange(m.sx) && inRange(m.sy) && inRange(m.tx) && inRange(m.ty) && inRange(m.ax) && inRange(m.ay);
-        return m.valid;
-    }
-
-    bool hasX0 = obj.isObject() && obj.isMember("x0");
-    bool hasY0 = obj.isObject() && obj.isMember("y0");
-    bool hasX1 = obj.isObject() && obj.isMember("x1");
-    bool hasY1 = obj.isObject() && obj.isMember("y1");
-    bool hasX2 = obj.isObject() && obj.isMember("x2");
-    bool hasY2 = obj.isObject() && obj.isMember("y2");
-    if (hasX0 && hasY0 && hasX1 && hasY1 && hasX2 && hasY2) {
-        int sx = obj["x0"].asInt();
-        int sy = obj["y0"].asInt();
-        int tx = obj["x1"].asInt();
-        int ty = obj["y1"].asInt();
-        int ax = obj["x2"].asInt();
-        int ay = obj["y2"].asInt();
-        if (inRange(sx) && inRange(sy) && inRange(tx) && inRange(ty) && inRange(ax) && inRange(ay)) {
-            m.sx = sx;
-            m.sy = sy;
-            m.tx = tx;
-            m.ty = ty;
-            m.ax = ax;
-            m.ay = ay;
-            m.valid = true;
-            return true;
-        }
-    }
-
-    if (obj.isMember("from") && obj["from"].isArray() && obj["from"].size() == 2 &&
-        obj.isMember("to") && obj["to"].isArray() && obj["to"].size() == 2 &&
-        obj.isMember("arrow") && obj["arrow"].isArray() && obj["arrow"].size() == 2) {
-        int sx = obj["from"][0].asInt();
-        int sy = obj["from"][1].asInt();
-        int tx = obj["to"][0].asInt();
-        int ty = obj["to"][1].asInt();
-        int ax = obj["arrow"][0].asInt();
-        int ay = obj["arrow"][1].asInt();
-        if (inRange(sx) && inRange(sy) && inRange(tx) && inRange(ty) && inRange(ax) && inRange(ay)) {
-            m.sx = sx;
-            m.sy = sy;
-            m.tx = tx;
-            m.ty = ty;
-            m.ax = ax;
-            m.ay = ay;
-            m.valid = true;
-            return true;
-        }
-    }
-    return false;
-}
-#else
-bool extractMoveFromJson(const void *, Move &) { return false; }
-#endif
-
-ParsedInput parseInput(const string &raw) {
+ParsedInput parseInputStream() {
     ParsedInput res;
     res.iAmFirst = true;
-#if HAS_JSONCPP
-    Json::CharReaderBuilder builder;
-    builder["collectComments"] = false;
-    unique_ptr<Json::CharReader> reader(builder.newCharReader());
-    Json::Value root;
-    string errs;
-    if (!reader->parse(raw.data(), raw.data() + raw.size(), &root, &errs)) {
-        return res;
-    }
-    if (!root.isMember("requests")) return res;
+    vector<int> nums;
+    int v = 0;
+    while (cin >> v) nums.push_back(v);
+    if (nums.empty()) return res;
 
-    const auto &reqs = root["requests"];
-    const auto &resps = root["responses"];
-    Json::ArrayIndex turn = reqs.size();
-    res.requests.resize(static_cast<size_t>(turn));
-    for (Json::ArrayIndex i = 0; i < turn; ++i) {
+    size_t moves = nums.size() / 6;
+    res.requests.resize(moves);
+    for (size_t i = 0; i < moves; ++i) {
         Move m;
-        if (extractMoveFromJson(reqs[i], m)) res.requests[i] = m;
+        m.sx = nums[i * 6 + 0];
+        m.sy = nums[i * 6 + 1];
+        m.tx = nums[i * 6 + 2];
+        m.ty = nums[i * 6 + 3];
+        m.ax = nums[i * 6 + 4];
+        m.ay = nums[i * 6 + 5];
+        m.valid = Board::inside(m.sx, m.sy) && Board::inside(m.tx, m.ty) && Board::inside(m.ax, m.ay);
+        res.requests[i] = m;
     }
-    if (resps.isArray()) {
-        Json::ArrayIndex rsz = resps.size();
-        res.responses.resize(static_cast<size_t>(rsz));
-        for (Json::ArrayIndex i = 0; i < rsz; ++i) {
-            Move m;
-            if (extractMoveFromJson(resps[i], m)) res.responses[i] = m;
-        }
-    }
-
-    if (turn > 0) {
-        Move first;
-        res.iAmFirst = !extractMoveFromJson(reqs[0], first) || !first.valid;
-        const auto &lastReq = reqs[turn - 1];
-        const char *keys[] = {"chessboard", "board"};
-        for (auto key : keys) {
-            if (lastReq.isMember(key) && lastReq[key].isArray() && lastReq[key].size() == BOARD_SIZE) {
-                res.hasBoard = true;
-                res.board.assign(BOARD_SIZE, vector<int>(BOARD_SIZE, 0));
-                for (int i = 0; i < BOARD_SIZE; ++i) {
-                    for (int j = 0; j < BOARD_SIZE; ++j) res.board[i][j] = lastReq[key][i][j].asInt();
-                }
-                break;
-            }
-        }
-    }
-#endif
+    res.iAmFirst = false;
     return res;
 }
-
 Move fallbackMove(const Board &b, int myColor) {
     vector<Move> moves;
     b.generateMoves(myColor, moves);
@@ -401,24 +288,16 @@ int main() {
     std::ios::sync_with_stdio(false);
     cin.tie(nullptr);
 
-    string rawInput((istreambuf_iterator<char>(cin)), istreambuf_iterator<char>());
-    ParsedInput input = parseInput(rawInput);
+    ParsedInput input = parseInputStream();
 
     int myColor = input.iAmFirst ? PLAYER_ONE : PLAYER_TWO;
     int oppColor = (myColor == PLAYER_ONE) ? PLAYER_TWO : PLAYER_ONE;
 
     Board board;
-    if (input.hasBoard) {
-        board.loadFromArray(input.board);
-    } else {
-        board.placeInitial();
-        int turn = static_cast<int>(input.requests.size());
-        for (int i = 0; i < turn; ++i) {
-            if (i > 0 && i - 1 < static_cast<int>(input.responses.size())) {
-                board.applyMove(input.responses[i - 1], myColor);
-            }
-            board.applyMove(input.requests[i], oppColor);
-        }
+    board.placeInitial();
+    int turn = static_cast<int>(input.requests.size());
+    for (int i = 0; i < turn; ++i) {
+        board.applyMove(input.requests[i], oppColor);
     }
 
     Move best = searchBest(board, myColor);
