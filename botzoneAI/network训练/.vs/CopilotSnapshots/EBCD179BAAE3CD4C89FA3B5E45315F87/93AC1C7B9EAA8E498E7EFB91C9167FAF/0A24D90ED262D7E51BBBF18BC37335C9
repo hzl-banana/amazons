@@ -1,0 +1,49 @@
+﻿@echo off
+REM 立即启动100轮训练 - 无需按键
+cd /d "%~dp0"
+
+echo ========================================
+echo    100轮自动训练 - 立即开始
+echo ========================================
+echo 开始时间: %DATE% %TIME%
+echo 配置: 100轮 x 20种群 x 10代 x 40局
+echo ========================================
+echo.
+
+if not exist iteration_results mkdir iteration_results
+
+REM 循环运行99轮训练（第1轮已完成）
+for /L %%i in (2,1,100) do (
+    echo.
+    echo ########################################
+    echo ### 第 %%i/100 轮
+    echo ########################################
+    echo.
+    
+    .\bin\x64\Release\trainer.exe 20 10 40
+    
+    if errorlevel 1 (
+        echo [错误] 训练失败！
+        pause
+        exit /b 1
+    )
+    
+    if exist best_params_final.txt (
+        copy /Y best_params_final.txt iteration_results\best_params_iter_%%i.txt >nul
+        echo [第 %%i 轮] 参数已保存
+    )
+    
+    if %%i LSS 100 (
+        powershell -ExecutionPolicy Bypass -File apply_best_params.ps1 >nul 2>&1
+        echo [第 %%i 轮] 参数已应用
+    )
+    
+    echo [第 %%i 轮] 完成！
+)
+
+echo.
+echo ========================================
+echo 训练完成！
+echo ========================================
+powershell -ExecutionPolicy Bypass -File generate_training_report.ps1
+pause

@@ -1,0 +1,79 @@
+﻿# 启动稳定的100轮训练（独立PowerShell）
+param(
+    [int]$StartFrom = 2,
+    [int]$EndAt = 100,
+    [int]$DelaySeconds = 5,
+    [int]$PopulationSize = 40,
+    [int]$GenerationsPerIter = 20,
+    [int]$GamesPerMatchup = 80
+)
+
+$ErrorActionPreference = 'Stop'
+
+cd $PSScriptRoot
+
+$logFile = "stable_100_training_$(Get-Date -Format 'yyyyMMdd_HHmmss').log"
+
+function Log {
+    param([string]$msg)
+    $ts = Get-Date -Format 'yyyy-MM-dd HH:mm:ss'
+    $line = "[$ts] $msg"
+    Write-Host $line
+    Add-Content -Path $logFile -Value $line
+}
+
+Log "启动质量优先的稳定训练：轮次 $StartFrom 到 $EndAt，Population=$PopulationSize, Generations=$GenerationsPerIter, Games=$GamesPerMatchup"
+Log "每轮延时 $DelaySeconds 秒 (用于采样/同步)，以保证稳定性"
+
+for ($i = $StartFrom; $i -le $EndAt; $i++) {
+    Log "=== 第 $i / $EndAt 轮 开始 ==="
+
+    $exe = Join-Path $PSScriptRoot "bin\x64\Release\trainer.exe"
+    if (-not (Test-Path $exe)) {
+        Log "错误：找不到训练器 $exe"
+        exit 1
+    }
+
+    # Run trainer with quality settings at normal priority; capture stdout/stderr to files
+    $stdout = Join-Path $PSScriptRoot "iteration_results\iter_${i}_stdout.txt"
+    $stderr = Join-Path $PSScriptRoot "iteration_results\iter_${i}_stderr.txt"
+    $args = "$PopulationSize $GenerationsPerIter $GamesPerMatchup"
+
+    Log "运行: $exe $args"
+
+    $proc = Start-Process -FilePath $exe -ArgumentList $PopulationSize, $GenerationsPerIter, $GamesPerMatchup -NoNewWindow -PassThru -RedirectStandardOutput $stdout -RedirectStandardError $stderr -Wait
+
+    if ($proc.ExitCode -ne 0) {
+        Log "错误：训练器退出码 $($proc.ExitCode). 查看 $stderr"
+        exit 1
+    }
+
+    # 保存参数
+    if (Test-Path "best_params_final.txt") {
+        Copy-Item -Path "best_params_final.txt" -Destination "iteration_results\best_params_iter_$i.txt" -Force
+        Log "参数已保存: iteration_results\best_params_iter_$i.txt"
+    } else {
+        Log "警告：best_params_final.txt 未找到"
+    }
+
+    # 应用参数（非最后一轮）
+    if ($i -lt $EndAt) {
+        try {
+            & powershell -ExecutionPolicy Bypass -File "apply_best_params.ps1" | Out-Null
+            Log "参数已应用到 network_params.h"
+        } catch {
+            Log "警告：应用参数失败：$_"
+        }
+    }
+
+    Log "=== 第 $i / $EndAt 轮 完成 ==="
+    Log "等待 $DelaySeconds 秒以稳定训练"
+    Start-Sleep -Seconds $DelaySeconds
+}
+
+Log "质量优先的100轮训练完成。生成报告..."
+& powershell -ExecutionPolicy Bypass -File "generate_training_report.ps1"
+Log "报告已生成: iteration_results\training_report.txt"
+Log "训练会话结束"
+
+Read-Host "按回车退出"

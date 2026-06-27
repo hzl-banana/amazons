@@ -1,0 +1,298 @@
+﻿#pragma once
+#include "network_params.h"
+#include <cstdint>
+#include <vector>
+#include <random>
+#include <cmath>
+
+// MSVC兼容性支持
+#ifdef _MSC_VER
+#include <intrin.h>
+#pragma intrinsic(_BitScanForward64, __popcnt64)
+
+// 定义__builtin_ctzll (count trailing zeros)
+inline int __builtin_ctzll(uint64_t x) {
+    unsigned long index = 0;
+#ifdef _WIN64
+    _BitScanForward64(&index, x);
+#else
+    // 32位版本
+    if ((uint32_t)x != 0) {
+        _BitScanForward(&index, (unsigned long)x);
+    } else {
+        _BitScanForward(&index, (unsigned long)(x >> 32));
+        index += 32;
+    }
+#endif
+    return (int)index;
+}
+
+// 定义__builtin_popcountll (population count)
+inline int __builtin_popcountll(uint64_t x) {
+#ifdef _WIN64
+    return (int)__popcnt64(x);
+#else
+    // 32位版本
+    return (int)(__popcnt((unsigned int)x) + __popcnt((unsigned int)(x >> 32)));
+#endif
+}
+#endif
+
+// 简化的游戏引擎，用于自对弈
+class GameEngine {
+private:
+    // 游戏状态
+    uint64_t board_bitmap;
+    uint64_t piece_position[2];  // [0]=黑方 [1]=白方
+    
+    // Zobrist哈希表
+    static uint64_t zobrist_table[64][3];
+    static uint64_t zobrist_player_turn;
+    static bool zobrist_initialized;
+    
+    // 当前参数
+    NetworkParams* params;
+    
+    // 随机数生成器
+    std::mt19937& rng;
+    
+    // Dirichlet噪音参数
+    double dirichlet_alpha;
+    bool use_dirichlet;
+    
+public:
+    GameEngine(NetworkParams* p, std::mt19937& random_gen, double dir_alpha = 0.3, bool use_dir = true)
+        : params(p), rng(random_gen), dirichlet_alpha(dir_alpha), use_dirichlet(use_dir) {
+        
+        if (!zobrist_initialized) {
+            initialize_zobrist();
+        }
+        
+        // 初始化棋盘
+        reset_board();
+    }
+    
+    void reset_board() {
+        board_bitmap = 0;
+        piece_position[0] = 0;
+        piece_position[1] = 0;
+        
+        // 黑棋位置: (2,0), (5,0), (0,2), (7,2)
+        board_bitmap |= (1ULL << 2) | (1ULL << 5) | (1ULL << 16) | (1ULL << 23);
+        piece_position[0] = board_bitmap;
+        
+        // 白棋位置: (0,5), (7,5), (2,7), (5,7)
+        board_bitmap |= (1ULL << 40) | (1ULL << 47) | (1ULL << 58) | (1ULL << 61);
+        piece_position[1] = board_bitmap ^ piece_position[0];
+    }
+    
+    static void initialize_zobrist() {
+        if (zobrist_initialized) return;
+        
+        std::mt19937 rng_zobrist(0xABCD1234);
+        std::uniform_int_distribution<uint64_t> dist(0, UINT64_MAX);
+        
+        for (int pos = 0; pos < 64; pos++) {
+            for (int type = 0; type < 3; type++) {
+                zobrist_table[pos][type] = dist(rng_zobrist);
+            }
+        }
+        
+        zobrist_player_turn = dist(rng_zobrist);
+        zobrist_initialized = true;
+    }
+    
+    // 获取皇后可移动位置（简化版）
+    uint64_t get_queen_moves(uint64_t queen_pos, uint64_t occupied) {
+        uint64_t moves = 0;
+        int pos = __builtin_ctzll(queen_pos);
+        int x = pos & 7;
+        int y = pos >> 3;
+        
+        // 8个方向
+        int dx[] = {-1, 0, 1, -1, 1, -1, 0, 1};
+        int dy[] = {-1, -1, -1, 0, 0, 1, 1, 1};
+        
+        for (int dir = 0; dir < 8; dir++) {
+            int nx = x + dx[dir];
+            int ny = y + dy[dir];
+            
+            while (nx >= 0 && nx < 8 && ny >= 0 && ny < 8) {
+                int new_pos = (ny << 3) | nx;
+                if (occupied & (1ULL << new_pos)) break;
+                
+                moves |= (1ULL << new_pos);
+                nx += dx[dir];
+                ny += dy[dir];
+            }
+        }
+        
+        return moves;
+    }
+    
+    // 生成所有合法走法
+    struct Move {
+        uint8_t from_pos;
+        uint8_t to_pos;
+        uint8_t arrow_pos;
+        double score;
+    };
+    
+    std::vector<Move> generate_moves(int player) {
+        std::vector<Move> moves;
+        uint64_t player_pieces = piece_position[player];
+        
+        while (player_pieces) {
+            uint64_t piece = player_pieces & (-player_pieces);
+            player_pieces ^= piece;
+            
+            int from_pos = __builtin_ctzll(piece);
+            uint64_t piece_moves = get_queen_moves(piece, board_bitmap);
+            
+            while (piece_moves) {
+                uint64_t to = piece_moves & (-piece_moves);
+                piece_moves ^= to;
+                
+                int to_pos = __builtin_ctzll(to);
+                
+                // 临时移动棋子
+                uint64_t temp_board = board_bitmap ^ piece ^ to;
+                uint64_t arrow_moves = get_queen_moves(to, temp_board);
+                
+                while (arrow_moves) {
+                    uint64_t arrow = arrow_moves & (-arrow_moves);
+                    arrow_moves ^= arrow;
+                    
+                    int arrow_pos = __builtin_ctzll(arrow);
+                    
+                    // 快速评估（简化版）
+                    double score = quick_evaluate(from_pos, to_pos, arrow_pos, player);
+                    
+                    moves.push_back({(uint8_t)from_pos, (uint8_t)to_pos, (uint8_t)arrow_pos, score});
+                }
+            }
+        }
+        
+        return moves;
+    }
+    
+    // 快速评估函数
+    double quick_evaluate(int from_pos, int to_pos, int arrow_pos, int player) {
+        // 简化的评估：基于位置和机动性
+        uint64_t temp_board = board_bitmap ^ (1ULL << from_pos) ^ (1ULL << to_pos) ^ (1ULL << arrow_pos);
+        uint64_t new_piece_pos = (1ULL << to_pos);
+        
+        // 计算机动性
+        uint64_t mobility = get_queen_moves(new_piece_pos, temp_board);
+        int mobility_count = __builtin_popcountll(mobility);
+        
+        // 计算中心性
+        int x = to_pos & 7;
+        int y = to_pos >> 3;
+        double center_score = 1.0 - (std::abs(x - 3.5) + std::abs(y - 3.5)) / 7.0;
+        
+        return mobility_count * 0.7 + center_score * 0.3;
+    }
+    
+    // 应用走法
+    void apply_move(const Move& move, int player) {
+        uint64_t from = 1ULL << move.from_pos;
+        uint64_t to = 1ULL << move.to_pos;
+        uint64_t arrow = 1ULL << move.arrow_pos;
+        
+        board_bitmap ^= from ^ to ^ arrow;
+        piece_position[player] ^= from ^ to;
+    }
+    
+    // 检查指定玩家是否有合法走法（轻量级版本）
+    bool has_legal_moves(int player) {
+        uint64_t player_pieces = piece_position[player];
+        
+        while (player_pieces) {
+            uint64_t piece = player_pieces & (-player_pieces);
+            player_pieces ^= piece;
+            
+            uint64_t piece_moves = get_queen_moves(piece, board_bitmap);
+            
+            // 只要有一个棋子能移动就返回true
+            if (piece_moves) {
+                return true;
+            }
+        }
+        
+        return false;
+    }
+    
+    // 添加Dirichlet噪音
+    void add_dirichlet_noise(std::vector<Move>& moves) {
+        if (!use_dirichlet || moves.empty()) return;
+        
+        std::gamma_distribution<double> gamma(dirichlet_alpha, 1.0);
+        std::vector<double> noise;
+        double sum = 0.0;
+        
+        for (size_t i = 0; i < moves.size(); i++) {
+            double n = gamma(rng);
+            noise.push_back(n);
+            sum += n;
+        }
+        
+        // 归一化并混合
+        for (size_t i = 0; i < moves.size(); i++) {
+            noise[i] /= sum;
+            moves[i].score = 0.75 * moves[i].score + 0.25 * noise[i];
+        }
+    }
+    
+    // 选择最佳走法
+    Move select_move(int player) {
+        auto moves = generate_moves(player);
+        
+        if (moves.empty()) {
+            return {0, 0, 0, 0.0};
+        }
+        
+        // 添加Dirichlet噪音
+        add_dirichlet_noise(moves);
+        
+        // 选择得分最高的走法
+        Move best_move = moves[0];
+        for (const auto& move : moves) {
+            if (move.score > best_move.score) {
+                best_move = move;
+            }
+        }
+        
+        return best_move;
+    }
+    
+    // 进行一局完整的自对弈
+    // 返回: 0=黑胜, 1=白胜, 2=平局
+    int play_game(int max_moves = 200) {
+        reset_board();
+        int current_player = 0;  // 黑方先手
+        int move_count = 0;
+        
+        while (move_count < max_moves) {
+            // 选择走法（已包含走法生成）
+            Move move = select_move(current_player);
+            
+            // 如果返回无效走法，说明无法移动，对手获胜
+            if (move.from_pos == 0 && move.to_pos == 0 && move.arrow_pos == 0) {
+                return 1 - current_player;
+            }
+            
+            apply_move(move, current_player);
+            current_player = 1 - current_player;
+            move_count++;
+        }
+        
+        // 达到最大步数，判定为平局
+        return 2;
+    }
+};
+
+// 静态成员初始化
+uint64_t GameEngine::zobrist_table[64][3] = {0};
+uint64_t GameEngine::zobrist_player_turn = 0;
+bool GameEngine::zobrist_initialized = false;

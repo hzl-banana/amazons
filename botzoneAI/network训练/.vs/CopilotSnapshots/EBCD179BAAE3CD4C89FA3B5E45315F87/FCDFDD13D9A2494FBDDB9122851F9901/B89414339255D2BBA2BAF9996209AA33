@@ -1,0 +1,302 @@
+﻿/**
+ * 神经网络训练程序
+ * 
+ * 功能：
+ * 1. 使用遗传算法训练评估函数参数
+ * 2. 多线程自对弈（充分利用10核CPU）
+ * 3. 添加Dirichlet噪音增加探索
+ * 4. 每组40局比赛，胜者晋级
+ * 5. 自动保存最佳参数
+ * 
+ * 编译命令（Windows + MSVC）：
+ * cl /O2 /std:c++17 /EHsc trainer.cpp /Fe:trainer.exe
+ * 
+ * 使用方法：
+ * trainer.exe [population_size] [generations] [games_per_matchup]
+ * 例如：trainer.exe 20 100 40
+ */
+
+#include "network_params.h"
+#include "game_engine.h"
+#include "population_manager.h"
+#include <iostream>
+#include <sstream>
+#include <thread>
+#include <mutex>
+#include <atomic>
+#include <chrono>
+#include <iomanip>
+#include <vector>
+#include <string>
+
+// 全局配置
+const int NUM_THREADS = 10;  // 10个线程充分利用10核CPU
+
+// 线程安全的日志
+std::mutex log_mutex;
+
+void thread_safe_log(const std::string& message) {
+    std::lock_guard<std::mutex> lock(log_mutex);
+    std::cout << message << std::endl;
+}
+
+/**
+ * 两个网络参数之间进行多局对战
+ * 返回：黑方（params1）的胜率
+ */
+double run_matchup(NetworkParams& params1, NetworkParams& params2, 
+                   int num_games, std::mt19937& rng, int thread_id) {
+    int params1_wins = 0;
+    int params2_wins = 0;
+    int draws = 0;
+    
+    for (int game = 0; game < num_games; game++) {
+        // 交替先后手
+        bool params1_is_black = (game % 2 == 0);
+        
+        // 创建游戏引擎（使用params1的参数）
+        NetworkParams* black_params = params1_is_black ? &params1 : &params2;
+        NetworkParams* white_params = params1_is_black ? &params2 : &params1;
+        
+        GameEngine engine(black_params, rng, 0.3, true);
+        int result = engine.play_game(200);
+        
+        // 记录结果
+        if (result == 0) {  // 黑方胜
+            if (params1_is_black) params1_wins++;
+            else params2_wins++;
+        } else if (result == 1) {  // 白方胜
+            if (params1_is_black) params2_wins++;
+            else params1_wins++;
+        } else {  // 平局
+            draws++;
+        }
+        
+        // 每5局输出一次进度（更频繁的反馈）
+        if ((game + 1) % 5 == 0) {
+            std::stringstream ss;
+            ss << "[Thread " << thread_id << "] Progress: " << (game + 1) << "/" << num_games
+               << " (P1:" << params1_wins << " P2:" << params2_wins << " D:" << draws << ")";
+            thread_safe_log(ss.str());
+        }
+    }
+    
+    // 更新统计（这里只更新params1）
+    params1.wins += params1_wins;
+    params1.losses += params2_wins;
+    params1.draws += draws;
+    
+    params2.wins += params2_wins;
+    params2.losses += params1_wins;
+    params2.draws += draws;
+    
+    return (params1_wins + 0.5 * draws) / num_games;
+}
+
+/**
+ * 评估整个种群
+ * 每个个体与随机选择的其他个体对战
+ */
+void evaluate_population(PopulationManager& pop_manager, int games_per_matchup) {
+    auto& population = pop_manager.get_population();
+    int pop_size = population.size();
+    
+    std::cout << "\n=== Evaluating Population ===" << std::endl;
+    std::cout << "Population size: " << pop_size << std::endl;
+    std::cout << "Games per matchup: " << games_per_matchup << std::endl;
+    
+    // 创建任务队列
+    struct MatchupTask {
+        int idx1;
+        int idx2;
+        int games;
+    };
+    
+    std::vector<MatchupTask> tasks;
+    
+    // 生成所有对战任务（每个个体与其他个体对战）
+    for (int i = 0; i < pop_size; i++) {
+        for (int j = i + 1; j < pop_size; j++) {
+            tasks.push_back({i, j, games_per_matchup});
+        }
+    }
+    
+    std::cout << "Total matchups: " << tasks.size() << std::endl;
+    
+    // 任务索引（原子操作保证线程安全）
+    std::atomic<size_t> task_index(0);
+    std::atomic<int> completed_matchups(0);
+    
+    // 线程工作函数
+    auto worker_thread = [&](int thread_id) {
+        // 每个线程有自己的随机数生成器
+        std::random_device rd;
+        std::mt19937 rng(rd() + thread_id);
+        
+        std::stringstream ss;
+        ss << "[Thread " << thread_id << "] Worker thread started";
+        thread_safe_log(ss.str());
+        
+        while (true) {
+            size_t idx = task_index.fetch_add(1);
+            if (idx >= tasks.size()) break;
+            
+            const auto& task = tasks[idx];
+            
+            ss.str("");
+            ss << "[Thread " << thread_id << "] Starting matchup " << (idx + 1) 
+               << "/" << tasks.size() << " (P" << task.idx1 << " vs P" << task.idx2 << ")";
+            thread_safe_log(ss.str());
+            
+            // 进行对战
+            auto matchup_start = std::chrono::high_resolution_clock::now();
+            
+            double p1_winrate = run_matchup(
+                population[task.idx1], 
+                population[task.idx2], 
+                task.games, 
+                rng, 
+                thread_id
+            );
+            
+            auto matchup_end = std::chrono::high_resolution_clock::now();
+            auto matchup_duration = std::chrono::duration_cast<std::chrono::seconds>(matchup_end - matchup_start);
+            
+            completed_matchups.fetch_add(1);
+            
+            ss.str("");
+            ss << "[Thread " << thread_id << "] Completed matchup " << (idx + 1) 
+               << "/" << tasks.size() << " - P" << task.idx1 << " winrate: " 
+               << std::fixed << std::setprecision(2) << (p1_winrate * 100) << "% "
+               << "(" << matchup_duration.count() << "s)";
+            thread_safe_log(ss.str());
+        }
+        
+        ss.str("");
+        ss << "[Thread " << thread_id << "] Worker thread finished";
+        thread_safe_log(ss.str());
+    };
+    
+    // 启动线程池
+    auto start_time = std::chrono::high_resolution_clock::now();
+    std::vector<std::thread> threads;
+    
+    for (int i = 0; i < NUM_THREADS; i++) {
+        threads.emplace_back(worker_thread, i);
+    }
+    
+    // 等待所有线程完成
+    for (auto& thread : threads) {
+        thread.join();
+    }
+    
+    auto end_time = std::chrono::high_resolution_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::seconds>(end_time - start_time);
+    
+    std::cout << "\n=== Evaluation Complete ===" << std::endl;
+    std::cout << "Time elapsed: " << duration.count() << " seconds" << std::endl;
+    std::cout << "Total games played: " << (tasks.size() * games_per_matchup) << std::endl;
+}
+
+/**
+ * 主训练循环
+ */
+void train(int population_size, int num_generations, int games_per_matchup) {
+    std::cout << "========================================" << std::endl;
+    std::cout << "   Neural Network Training Program" << std::endl;
+    std::cout << "========================================" << std::endl;
+    std::cout << "Configuration:" << std::endl;
+    std::cout << "  - Population size: " << population_size << std::endl;
+    std::cout << "  - Generations: " << num_generations << std::endl;
+    std::cout << "  - Games per matchup: " << games_per_matchup << std::endl;
+    std::cout << "  - Number of threads: " << NUM_THREADS << std::endl;
+    std::cout << "  - Dirichlet noise: Enabled (alpha=0.3)" << std::endl;
+    std::cout << "========================================\n" << std::endl;
+    
+    // 初始化随机数生成器
+    std::random_device rd;
+    std::mt19937 rng(rd());
+    
+    // 创建种群管理器
+    PopulationManager pop_manager(population_size, rng, 
+                                   population_size / 5,  // 精英数量：20%
+                                   0.1,   // 变异率
+                                   0.05,  // 变异强度
+                                   0.7);  // 交叉率
+    
+    // 训练循环
+    for (int generation = 0; generation < num_generations; generation++) {
+        std::cout << "\n########################################" << std::endl;
+        std::cout << "### GENERATION " << (generation + 1) << "/" << num_generations << std::endl;
+        std::cout << "########################################\n" << std::endl;
+        
+        auto gen_start = std::chrono::high_resolution_clock::now();
+        
+        // 评估当前种群
+        evaluate_population(pop_manager, games_per_matchup);
+        
+        // 保存当前最佳个体
+        std::string filename = "best_params_gen_" + std::to_string(generation + 1) + ".txt";
+        pop_manager.save_best(filename);
+        
+        auto gen_end = std::chrono::high_resolution_clock::now();
+        auto gen_duration = std::chrono::duration_cast<std::chrono::minutes>(gen_end - gen_start);
+        
+        std::cout << "\n--- Generation " << (generation + 1) << " completed in " 
+                  << gen_duration.count() << " minutes ---\n" << std::endl;
+        
+        // 如果不是最后一代，进化到下一代
+        if (generation < num_generations - 1) {
+            std::cout << "Evolving to next generation...\n" << std::endl;
+            pop_manager.evolve();
+        }
+    }
+    
+    std::cout << "\n========================================" << std::endl;
+    std::cout << "   Training Complete!" << std::endl;
+    std::cout << "========================================" << std::endl;
+    
+    // 保存最终最佳参数
+    pop_manager.save_best("best_params_final.txt");
+}
+
+int main(int argc, char* argv[]) {
+    // 默认参数
+    int population_size = 20;
+    int num_generations = 100;
+    int games_per_matchup = 40;
+    
+    // 解析命令行参数
+    if (argc >= 2) {
+        population_size = std::atoi(argv[1]);
+        if (population_size < 2) {
+            std::cerr << "Error: Population size must be at least 2" << std::endl;
+            return 1;
+        }
+    }
+    
+    if (argc >= 3) {
+        num_generations = std::atoi(argv[2]);
+        if (num_generations < 1) {
+            std::cerr << "Error: Number of generations must be at least 1" << std::endl;
+            return 1;
+        }
+    }
+    
+    if (argc >= 4) {
+        games_per_matchup = std::atoi(argv[3]);
+        if (games_per_matchup < 1) {
+            std::cerr << "Error: Games per matchup must be at least 1" << std::endl;
+            return 1;
+        }
+    }
+    
+    try {
+        train(population_size, num_generations, games_per_matchup);
+    } catch (const std::exception& e) {
+        std::cerr << "Error: " << e.what() << std::endl;
+        return 1;
+    }
+    
+    return 0;
+}

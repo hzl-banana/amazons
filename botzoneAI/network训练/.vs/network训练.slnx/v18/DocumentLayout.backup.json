@@ -1,0 +1,309 @@
+{
+  "Version": 1,
+  "WorkspaceRootPath": "\\\\Mac\\Home\\Desktop\\amazons \u8D6B\u9707\u9716\\botzone AI\\network\u8BAD\u7EC3\\",
+  "Documents": [
+    {
+      "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|C:\\Users\\hezhenlin\\AppData\\Local\\Temp\\VisualStudio\\copilot-vs\\plan-9b17cdeb-e3aa-4ccd-89fa-3b5e45315f87.md||{EFC0BB08-EA7D-40C6-A696-C870411A895B}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|\\\\Mac\\Home\\Desktop\\amazons \u8D6B\u9707\u9716\\botzone AI\\network\u8BAD\u7EC3\\network\\START_NOW.bat||{3B902123-F8A7-4915-9F01-361F908088D0}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|\\\\Mac\\Home\\Desktop\\amazons \u8D6B\u9707\u9716\\botzone AI\\network\u8BAD\u7EC3\\network\\auto_train_loop.ps1||{3B902123-F8A7-4915-9F01-361F908088D0}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|\\\\Mac\\Home\\Desktop\\amazons \u8D6B\u9707\u9716\\botzone AI\\network\u8BAD\u7EC3\\network\\start_training.ps1||{3B902123-F8A7-4915-9F01-361F908088D0}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|\\\\Mac\\Home\\Desktop\\amazons \u8D6B\u9707\u9716\\botzone AI\\network\u8BAD\u7EC3\\network\\START_TRAINING.bat||{3B902123-F8A7-4915-9F01-361F908088D0}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|\\\\Mac\\Home\\Desktop\\amazons \u8D6B\u9707\u9716\\botzone AI\\network\u8BAD\u7EC3\\network\\START_HERE.md||{EFC0BB08-EA7D-40C6-A696-C870411A895B}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|\\\\Mac\\Home\\Desktop\\amazons \u8D6B\u9707\u9716\\botzone AI\\network\u8BAD\u7EC3\\network\\monitor_training.ps1||{3B902123-F8A7-4915-9F01-361F908088D0}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|\\\\Mac\\Home\\Desktop\\amazons \u8D6B\u9707\u9716\\botzone AI\\network\u8BAD\u7EC3\\network\\TRAINING_STATUS.md||{EFC0BB08-EA7D-40C6-A696-C870411A895B}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|\\\\Mac\\Home\\Desktop\\amazons \u8D6B\u9707\u9716\\botzone AI\\network\u8BAD\u7EC3\\network\\QUICK_START.md||{EFC0BB08-EA7D-40C6-A696-C870411A895B}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|\\\\Mac\\Home\\Desktop\\amazons \u8D6B\u9707\u9716\\botzone AI\\network\u8BAD\u7EC3\\network\\RUN_100_ROUNDS.bat||{3B902123-F8A7-4915-9F01-361F908088D0}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|\\\\Mac\\Home\\Desktop\\amazons \u8D6B\u9707\u9716\\botzone AI\\network\u8BAD\u7EC3\\network\\RESUME_TRAINING.bat||{3B902123-F8A7-4915-9F01-361F908088D0}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|\\\\Mac\\Home\\Desktop\\amazons \u8D6B\u9707\u9716\\botzone AI\\network\u8BAD\u7EC3\\network\\standalone_training.ps1||{3B902123-F8A7-4915-9F01-361F908088D0}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|\\\\Mac\\Home\\Desktop\\amazons \u8D6B\u9707\u9716\\botzone AI\\network\u8BAD\u7EC3\\network\\START_INDEPENDENT.bat||{3B902123-F8A7-4915-9F01-361F908088D0}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|\\\\Mac\\Home\\Desktop\\amazons \u8D6B\u9707\u9716\\botzone AI\\network\u8BAD\u7EC3\\network\\TRAIN_300_ROUNDS.bat||{3B902123-F8A7-4915-9F01-361F908088D0}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|\\\\Mac\\Home\\Desktop\\amazons \u8D6B\u9707\u9716\\botzone AI\\network\u8BAD\u7EC3\\network\\train_300_rounds.ps1||{3B902123-F8A7-4915-9F01-361F908088D0}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|\\\\Mac\\Home\\Desktop\\amazons \u8D6B\u9707\u9716\\botzone AI\\network\u8BAD\u7EC3\\network\\START_300_ROUNDS.bat||{3B902123-F8A7-4915-9F01-361F908088D0}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|\\\\mac\\Home\\Desktop\\amazons \u8D6B\u9707\u9716\\botzone AI\\network\u8BAD\u7EC3\\network\\start_stable_100.ps1||{3B902123-F8A7-4915-9F01-361F908088D0}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|\\\\mac\\Home\\Desktop\\amazons \u8D6B\u9707\u9716\\botzone AI\\network\u8BAD\u7EC3\\network\\network.cpp||{D0E1A5C6-B359-4E41-9B60-3365922C2A22}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|\\\\mac\\Home\\Desktop\\amazons \u8D6B\u9707\u9716\\botzone AI\\network\u8BAD\u7EC3\\network\\start_trainer.ps1||{3B902123-F8A7-4915-9F01-361F908088D0}"
+    }
+  ],
+  "DocumentGroupContainers": [
+    {
+      "Orientation": 0,
+      "VerticalTabListWidth": 256,
+      "DocumentGroups": [
+        {
+          "DockedWidth": 200,
+          "SelectedChildIndex": 2,
+          "Children": [
+            {
+              "$type": "Document",
+              "DocumentIndex": 18,
+              "Title": "start_trainer.ps1",
+              "DocumentMoniker": "\\\\mac\\Home\\Desktop\\amazons \u8D6B\u9707\u9716\\botzone AI\\network\u8BAD\u7EC3\\network\\start_trainer.ps1",
+              "RelativeDocumentMoniker": "network\\start_trainer.ps1",
+              "ToolTip": "\\\\mac\\Home\\Desktop\\amazons \u8D6B\u9707\u9716\\botzone AI\\network\u8BAD\u7EC3\\network\\start_trainer.ps1",
+              "RelativeToolTip": "network\\start_trainer.ps1",
+              "ViewState": "AgIAAAAAAAAAAAAAAADwvx4AAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.001001|",
+              "WhenOpened": "2026-01-12T14:55:31.355Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 17,
+              "Title": "network.cpp",
+              "DocumentMoniker": "\\\\mac\\Home\\Desktop\\amazons \u8D6B\u9707\u9716\\botzone AI\\network\u8BAD\u7EC3\\network\\network.cpp",
+              "RelativeDocumentMoniker": "network\\network.cpp",
+              "ToolTip": "\\\\mac\\Home\\Desktop\\amazons \u8D6B\u9707\u9716\\botzone AI\\network\u8BAD\u7EC3\\network\\network.cpp",
+              "RelativeToolTip": "network\\network.cpp",
+              "ViewState": "AgIAALMFAAAAAAAAAABQwAAAAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000677|",
+              "WhenOpened": "2026-01-12T04:18:32.388Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 0,
+              "Title": "plan-9b17cdeb-e3aa-4ccd-89fa-3b5e45315f87.md",
+              "DocumentMoniker": "C:\\Users\\hezhenlin\\AppData\\Local\\Temp\\VisualStudio\\copilot-vs\\plan-9b17cdeb-e3aa-4ccd-89fa-3b5e45315f87.md",
+              "ToolTip": "C:\\Users\\hezhenlin\\AppData\\Local\\Temp\\VisualStudio\\copilot-vs\\plan-9b17cdeb-e3aa-4ccd-89fa-3b5e45315f87.md [\u53EA\u8BFB]",
+              "ViewState": "AgIAAAAAAAAAAAAAAADwvwAAAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.001818|",
+              "WhenOpened": "2026-01-12T04:16:23.677Z",
+              "EditorCaption": " [\u53EA\u8BFB]"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 16,
+              "Title": "start_stable_100.ps1",
+              "DocumentMoniker": "\\\\mac\\Home\\Desktop\\amazons \u8D6B\u9707\u9716\\botzone AI\\network\u8BAD\u7EC3\\network\\start_stable_100.ps1",
+              "RelativeDocumentMoniker": "network\\start_stable_100.ps1",
+              "ToolTip": "\\\\mac\\Home\\Desktop\\amazons \u8D6B\u9707\u9716\\botzone AI\\network\u8BAD\u7EC3\\network\\start_stable_100.ps1",
+              "RelativeToolTip": "network\\start_stable_100.ps1",
+              "ViewState": "AgIAAE0AAAAAAAAAAABIwE8AAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.001001|",
+              "WhenOpened": "2026-01-12T04:14:02.95Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 11,
+              "Title": "standalone_training.ps1",
+              "DocumentMoniker": "\\\\Mac\\Home\\Desktop\\amazons \u8D6B\u9707\u9716\\botzone AI\\network\u8BAD\u7EC3\\network\\standalone_training.ps1",
+              "RelativeDocumentMoniker": "network\\standalone_training.ps1",
+              "ToolTip": "\\\\Mac\\Home\\Desktop\\amazons \u8D6B\u9707\u9716\\botzone AI\\network\u8BAD\u7EC3\\network\\standalone_training.ps1",
+              "RelativeToolTip": "network\\standalone_training.ps1",
+              "ViewState": "AgIAAAAAAAAAAAAAAADwv18AAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.001001|",
+              "WhenOpened": "2026-01-11T07:25:55.842Z"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 1,
+              "Title": "START_NOW.bat",
+              "DocumentMoniker": "\\\\Mac\\Home\\Desktop\\amazons \u8D6B\u9707\u9716\\botzone AI\\network\u8BAD\u7EC3\\network\\START_NOW.bat",
+              "RelativeDocumentMoniker": "network\\START_NOW.bat",
+              "ToolTip": "\\\\Mac\\Home\\Desktop\\amazons \u8D6B\u9707\u9716\\botzone AI\\network\u8BAD\u7EC3\\network\\START_NOW.bat",
+              "RelativeToolTip": "network\\START_NOW.bat",
+              "ViewState": "AgIAADEAAAAAAAAAAAAQwAEAAAAVAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000614|",
+              "WhenOpened": "2026-01-11T06:27:37.651Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 12,
+              "Title": "START_INDEPENDENT.bat",
+              "DocumentMoniker": "\\\\Mac\\Home\\Desktop\\amazons \u8D6B\u9707\u9716\\botzone AI\\network\u8BAD\u7EC3\\network\\START_INDEPENDENT.bat",
+              "RelativeDocumentMoniker": "network\\START_INDEPENDENT.bat",
+              "ToolTip": "\\\\Mac\\Home\\Desktop\\amazons \u8D6B\u9707\u9716\\botzone AI\\network\u8BAD\u7EC3\\network\\START_INDEPENDENT.bat",
+              "RelativeToolTip": "network\\START_INDEPENDENT.bat",
+              "ViewState": "AgIAAAAAAAAAAAAAAADwvywAAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000614|",
+              "WhenOpened": "2026-01-11T07:26:08.02Z"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 10,
+              "Title": "RESUME_TRAINING.bat",
+              "DocumentMoniker": "\\\\Mac\\Home\\Desktop\\amazons \u8D6B\u9707\u9716\\botzone AI\\network\u8BAD\u7EC3\\network\\RESUME_TRAINING.bat",
+              "RelativeDocumentMoniker": "network\\RESUME_TRAINING.bat",
+              "ToolTip": "\\\\Mac\\Home\\Desktop\\amazons \u8D6B\u9707\u9716\\botzone AI\\network\u8BAD\u7EC3\\network\\RESUME_TRAINING.bat",
+              "RelativeToolTip": "network\\RESUME_TRAINING.bat",
+              "ViewState": "AgIAAAAAAAAAAAAAAADwv0gAAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000614|",
+              "WhenOpened": "2026-01-11T07:00:15.334Z"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 15,
+              "Title": "START_300_ROUNDS.bat",
+              "DocumentMoniker": "\\\\Mac\\Home\\Desktop\\amazons \u8D6B\u9707\u9716\\botzone AI\\network\u8BAD\u7EC3\\network\\START_300_ROUNDS.bat",
+              "RelativeDocumentMoniker": "network\\START_300_ROUNDS.bat",
+              "ToolTip": "\\\\Mac\\Home\\Desktop\\amazons \u8D6B\u9707\u9716\\botzone AI\\network\u8BAD\u7EC3\\network\\START_300_ROUNDS.bat",
+              "RelativeToolTip": "network\\START_300_ROUNDS.bat",
+              "ViewState": "AgIAAAAAAAAAAAAAAADwv0QAAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000614|",
+              "WhenOpened": "2026-01-11T08:52:07.793Z"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 13,
+              "Title": "TRAIN_300_ROUNDS.bat",
+              "DocumentMoniker": "\\\\Mac\\Home\\Desktop\\amazons \u8D6B\u9707\u9716\\botzone AI\\network\u8BAD\u7EC3\\network\\TRAIN_300_ROUNDS.bat",
+              "RelativeDocumentMoniker": "network\\TRAIN_300_ROUNDS.bat",
+              "ToolTip": "\\\\Mac\\Home\\Desktop\\amazons \u8D6B\u9707\u9716\\botzone AI\\network\u8BAD\u7EC3\\network\\TRAIN_300_ROUNDS.bat",
+              "RelativeToolTip": "network\\TRAIN_300_ROUNDS.bat",
+              "ViewState": "AgIAAAAAAAAAAAAAAADwv0YAAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000614|",
+              "WhenOpened": "2026-01-11T08:50:40.829Z"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 14,
+              "Title": "train_300_rounds.ps1",
+              "DocumentMoniker": "\\\\Mac\\Home\\Desktop\\amazons \u8D6B\u9707\u9716\\botzone AI\\network\u8BAD\u7EC3\\network\\train_300_rounds.ps1",
+              "RelativeDocumentMoniker": "network\\train_300_rounds.ps1",
+              "ToolTip": "\\\\Mac\\Home\\Desktop\\amazons \u8D6B\u9707\u9716\\botzone AI\\network\u8BAD\u7EC3\\network\\train_300_rounds.ps1",
+              "RelativeToolTip": "network\\train_300_rounds.ps1",
+              "ViewState": "AgIAAAAAAAAAAAAAAADwv58AAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.001001|",
+              "WhenOpened": "2026-01-11T08:51:32.154Z"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 8,
+              "Title": "QUICK_START.md",
+              "DocumentMoniker": "\\\\Mac\\Home\\Desktop\\amazons \u8D6B\u9707\u9716\\botzone AI\\network\u8BAD\u7EC3\\network\\QUICK_START.md",
+              "RelativeDocumentMoniker": "network\\QUICK_START.md",
+              "ToolTip": "\\\\Mac\\Home\\Desktop\\amazons \u8D6B\u9707\u9716\\botzone AI\\network\u8BAD\u7EC3\\network\\QUICK_START.md",
+              "RelativeToolTip": "network\\QUICK_START.md",
+              "ViewState": "AgIAAAAAAAAAAAAAAADwv6UAAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.001818|",
+              "WhenOpened": "2026-01-11T06:19:06.611Z"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 5,
+              "Title": "START_HERE.md",
+              "DocumentMoniker": "\\\\Mac\\Home\\Desktop\\amazons \u8D6B\u9707\u9716\\botzone AI\\network\u8BAD\u7EC3\\network\\START_HERE.md",
+              "RelativeDocumentMoniker": "network\\START_HERE.md",
+              "ToolTip": "\\\\Mac\\Home\\Desktop\\amazons \u8D6B\u9707\u9716\\botzone AI\\network\u8BAD\u7EC3\\network\\START_HERE.md",
+              "RelativeToolTip": "network\\START_HERE.md",
+              "ViewState": "AgIAAAAAAAAAAAAAAADwv7AAAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.001818|",
+              "WhenOpened": "2026-01-11T06:06:40.145Z"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 4,
+              "Title": "START_TRAINING.bat",
+              "DocumentMoniker": "\\\\Mac\\Home\\Desktop\\amazons \u8D6B\u9707\u9716\\botzone AI\\network\u8BAD\u7EC3\\network\\START_TRAINING.bat",
+              "RelativeDocumentMoniker": "network\\START_TRAINING.bat",
+              "ToolTip": "\\\\Mac\\Home\\Desktop\\amazons \u8D6B\u9707\u9716\\botzone AI\\network\u8BAD\u7EC3\\network\\START_TRAINING.bat",
+              "RelativeToolTip": "network\\START_TRAINING.bat",
+              "ViewState": "AgIAAAAAAAAAAAAAAADwvxEAAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000614|",
+              "WhenOpened": "2026-01-11T05:41:38.701Z"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 3,
+              "Title": "start_training.ps1",
+              "DocumentMoniker": "\\\\Mac\\Home\\Desktop\\amazons \u8D6B\u9707\u9716\\botzone AI\\network\u8BAD\u7EC3\\network\\start_training.ps1",
+              "RelativeDocumentMoniker": "network\\start_training.ps1",
+              "ToolTip": "\\\\Mac\\Home\\Desktop\\amazons \u8D6B\u9707\u9716\\botzone AI\\network\u8BAD\u7EC3\\network\\start_training.ps1",
+              "RelativeToolTip": "network\\start_training.ps1",
+              "ViewState": "AgIAAAAAAAAAAAAAAADwv1oAAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.001001|",
+              "WhenOpened": "2026-01-11T04:43:47.923Z"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 9,
+              "Title": "RUN_100_ROUNDS.bat",
+              "DocumentMoniker": "\\\\Mac\\Home\\Desktop\\amazons \u8D6B\u9707\u9716\\botzone AI\\network\u8BAD\u7EC3\\network\\RUN_100_ROUNDS.bat",
+              "RelativeDocumentMoniker": "network\\RUN_100_ROUNDS.bat",
+              "ToolTip": "\\\\Mac\\Home\\Desktop\\amazons \u8D6B\u9707\u9716\\botzone AI\\network\u8BAD\u7EC3\\network\\RUN_100_ROUNDS.bat",
+              "RelativeToolTip": "network\\RUN_100_ROUNDS.bat",
+              "ViewState": "AgIAAAAAAAAAAAAAAADwv0wAAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000614|",
+              "WhenOpened": "2026-01-11T06:25:51.124Z"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 2,
+              "Title": "auto_train_loop.ps1",
+              "DocumentMoniker": "\\\\Mac\\Home\\Desktop\\amazons \u8D6B\u9707\u9716\\botzone AI\\network\u8BAD\u7EC3\\network\\auto_train_loop.ps1",
+              "RelativeDocumentMoniker": "network\\auto_train_loop.ps1",
+              "ToolTip": "\\\\Mac\\Home\\Desktop\\amazons \u8D6B\u9707\u9716\\botzone AI\\network\u8BAD\u7EC3\\network\\auto_train_loop.ps1",
+              "RelativeToolTip": "network\\auto_train_loop.ps1",
+              "ViewState": "AgIAAK4AAAAAAAAAAABIwLAAAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.001001|",
+              "WhenOpened": "2026-01-11T04:43:14.931Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 7,
+              "Title": "TRAINING_STATUS.md",
+              "DocumentMoniker": "\\\\Mac\\Home\\Desktop\\amazons \u8D6B\u9707\u9716\\botzone AI\\network\u8BAD\u7EC3\\network\\TRAINING_STATUS.md",
+              "RelativeDocumentMoniker": "network\\TRAINING_STATUS.md",
+              "ToolTip": "\\\\Mac\\Home\\Desktop\\amazons \u8D6B\u9707\u9716\\botzone AI\\network\u8BAD\u7EC3\\network\\TRAINING_STATUS.md",
+              "RelativeToolTip": "network\\TRAINING_STATUS.md",
+              "ViewState": "AgIAAAAAAAAAAAAAAADwv54AAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.001818|",
+              "WhenOpened": "2026-01-11T06:17:54.288Z"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 6,
+              "Title": "monitor_training.ps1",
+              "DocumentMoniker": "\\\\Mac\\Home\\Desktop\\amazons \u8D6B\u9707\u9716\\botzone AI\\network\u8BAD\u7EC3\\network\\monitor_training.ps1",
+              "RelativeDocumentMoniker": "network\\monitor_training.ps1",
+              "ToolTip": "\\\\Mac\\Home\\Desktop\\amazons \u8D6B\u9707\u9716\\botzone AI\\network\u8BAD\u7EC3\\network\\monitor_training.ps1",
+              "RelativeToolTip": "network\\monitor_training.ps1",
+              "ViewState": "AgIAAAAAAAAAAAAAAADwv1kAAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.001001|",
+              "WhenOpened": "2026-01-11T06:15:05.987Z"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

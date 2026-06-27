@@ -1,0 +1,152 @@
+﻿# ==================================================
+# 自动训练循环脚本 (PowerShell版本)
+# 
+# 适合长时间运行，支持后台执行
+# ==================================================
+
+param(
+    [int]$TotalIterations = 100,
+    [int]$PopulationSize = 20,
+    [int]$GenerationsPerIter = 10,
+    [int]$GamesPerMatchup = 40,
+    [int]$StartIteration = 1
+)
+
+$ErrorActionPreference = "Continue"
+
+# 创建结果目录
+if (-not (Test-Path "iteration_results")) {
+    New-Item -ItemType Directory -Path "iteration_results" | Out-Null
+}
+
+# 显示配置
+Write-Host "========================================" -ForegroundColor Cyan
+Write-Host "   自动训练循环系统 (PowerShell)" -ForegroundColor Cyan
+Write-Host "========================================" -ForegroundColor Cyan
+Write-Host "开始时间: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')" -ForegroundColor White
+Write-Host "总迭代轮数: $TotalIterations (从第 $StartIteration 轮开始)" -ForegroundColor Yellow
+Write-Host "每轮代数: $GenerationsPerIter" -ForegroundColor Yellow
+Write-Host "种群大小: $PopulationSize" -ForegroundColor Yellow
+Write-Host "每对局数: $GamesPerMatchup" -ForegroundColor Yellow
+Write-Host "预计总时间: $([math]::Round(($TotalIterations - $StartIteration + 1) * 1.5, 1)) - $([math]::Round(($TotalIterations - $StartIteration + 1) * 2, 1)) 小时" -ForegroundColor Yellow
+Write-Host "========================================" -ForegroundColor Cyan
+Write-Host ""
+
+# 主循环
+for ($i = $StartIteration; $i -le $TotalIterations; $i++) {
+    $iterStartTime = Get-Date
+    
+    Write-Host ""
+    Write-Host "########################################" -ForegroundColor Cyan
+    Write-Host "### 迭代 $i/$TotalIterations" -ForegroundColor Cyan
+    Write-Host "########################################" -ForegroundColor Cyan
+    Write-Host "开始时间: $(Get-Date -Format 'HH:mm:ss')" -ForegroundColor White
+    Write-Host ""
+    
+    # 运行训练（前台运行，显示输出）
+    Write-Host "[迭代 $i] 开始训练..." -ForegroundColor Green
+    
+    try {
+        # 直接运行，输出到控制台
+        & ".\bin\x64\Release\trainer.exe" $PopulationSize $GenerationsPerIter $GamesPerMatchup
+        
+        if ($LASTEXITCODE -ne 0) {
+            Write-Host "[错误] 迭代 $i 训练失败！退出代码: $LASTEXITCODE" -ForegroundColor Red
+            break
+        }
+        
+    } catch {
+        Write-Host "[错误] 迭代 $i 执行异常: $_" -ForegroundColor Red
+        break
+    }
+    
+    $iterEndTime = Get-Date
+    $iterDuration = ($iterEndTime - $iterStartTime).TotalMinutes
+    
+    # 保存参数
+    if (Test-Path "best_params_final.txt") {
+        Copy-Item "best_params_final.txt" "iteration_results\best_params_iter_${i}.txt" -Force
+        Write-Host "[迭代 $i] 参数已保存" -ForegroundColor Green
+        
+        # 提取统计信息
+        $content = Get-Content "best_params_final.txt" -Raw
+        if ($content -match 'Wins:\s+(\d+)') { $wins = [int]$Matches[1] } else { $wins = 0 }
+        if ($content -match 'Losses:\s+(\d+)') { $losses = [int]$Matches[1] } else { $losses = 0 }
+        if ($content -match 'Draws:\s+(\d+)') { $draws = [int]$Matches[1] } else { $draws = 0 }
+        
+        $totalGames = $wins + $losses + $draws
+        if ($totalGames -gt 0) {
+            $winrate = [math]::Round(($wins + 0.5 * $draws) / $totalGames * 100, 2)
+        } else {
+            $winrate = 0
+        }
+        
+        Write-Host "  胜利: $wins | 失败: $losses | 平局: $draws | 胜率: ${winrate}%" -ForegroundColor Yellow
+    }
+    
+    # 应用新参数（如果不是最后一轮）
+    if ($i -lt $TotalIterations) {
+        Write-Host "[迭代 $i] 应用新参数..." -ForegroundColor Cyan
+        
+        try {
+            & powershell -ExecutionPolicy Bypass -File "apply_best_params.ps1" | Out-Null
+            Write-Host "[迭代 $i] 新参数已应用" -ForegroundColor Green
+        } catch {
+            Write-Host "[警告] 参数应用失败: $_" -ForegroundColor Yellow
+        }
+    }
+    
+    Write-Host "[迭代 $i] 完成！耗时: $([math]::Round($iterDuration, 2)) 分钟" -ForegroundColor Green
+    Write-Host "========================================" -ForegroundColor Cyan
+    
+    # 显示进度
+    $completedIterations = $i - $StartIteration + 1
+    $remainingIterations = $TotalIterations - $i
+    $estimatedRemaining = $remainingIterations * $iterDuration
+    
+    Write-Host ""
+    Write-Host "进度: $i/$TotalIterations ($([math]::Round($i/$TotalIterations*100, 1))%)" -ForegroundColor White
+    if ($remainingIterations -gt 0) {
+        Write-Host "预计剩余时间: $([math]::Round($estimatedRemaining / 60, 1)) 小时" -ForegroundColor White
+    }
+    
+    # 每10轮生成一次报告
+    if ($i % 10 -eq 0) {
+        Write-Host ""
+        Write-Host "--- 生成中期报告 ---" -ForegroundColor Magenta
+        try {
+            & powershell -ExecutionPolicy Bypass -File "generate_training_report.ps1" | Out-Null
+            Write-Host "中期报告已生成: iteration_results\training_report.txt" -ForegroundColor Magenta
+        } catch {
+            Write-Host "报告生成失败: $_" -ForegroundColor Yellow
+        }
+    }
+}
+
+# 最终报告
+Write-Host ""
+Write-Host "========================================" -ForegroundColor Green
+Write-Host "   所有迭代完成！" -ForegroundColor Green
+Write-Host "========================================" -ForegroundColor Green
+Write-Host "完成时间: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')" -ForegroundColor White
+Write-Host "总迭代轮数: $TotalIterations" -ForegroundColor Yellow
+Write-Host "结果保存在: iteration_results\" -ForegroundColor Yellow
+Write-Host "========================================" -ForegroundColor Green
+Write-Host ""
+
+# 生成最终报告
+Write-Host "正在生成训练统计报告..." -ForegroundColor Cyan
+try {
+    & powershell -ExecutionPolicy Bypass -File "generate_training_report.ps1"
+    Write-Host ""
+    Write-Host "训练报告已生成！" -ForegroundColor Green
+    Write-Host "  - 详细报告: iteration_results\training_report.txt" -ForegroundColor Yellow
+    Write-Host "  - CSV数据: iteration_results\training_data.csv" -ForegroundColor Yellow
+} catch {
+    Write-Host "报告生成失败: $_" -ForegroundColor Red
+}
+
+Write-Host ""
+Write-Host "========================================" -ForegroundColor Green
+Write-Host "   训练完成！" -ForegroundColor Green
+Write-Host "==========================================" -ForegroundColor Green

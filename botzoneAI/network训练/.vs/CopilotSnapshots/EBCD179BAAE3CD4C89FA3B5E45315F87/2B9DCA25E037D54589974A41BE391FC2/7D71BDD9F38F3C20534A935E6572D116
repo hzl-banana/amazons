@@ -1,0 +1,1451 @@
+﻿#include <stdio.h>
+#include <stdlib.h>
+#include <stdint.h>
+#include <string.h>
+#include <time.h>
+#include <math.h>
+#include <string.h>
+#ifdef _WIN32`n// Windows does not need unistd.h`n#else`n#include <unistd.h>`n#endif
+#include <immintrin.h>
+#include <assert.h>
+#include <inttypes.h>
+
+#define bool  int
+#define true  1
+#define false 0
+
+#define MAX_STATE_COUNT    (2000 * 2000 * 3)  // 最大状态数量
+#define OPENING_BOOK_ENTRY_COUNT 64  // 开局库大小
+
+#define PLAYER_BLACK    0  // 黑方
+#define PLAYER_WHITE    1  // 白方
+#define CHESSBOARD_SIZE 8  // 棋盘大小 8x8
+
+#ifdef _MSC_VER`n// MSVC uses project settings`n#else`n#pragma GCC target("popcnt")
+#pragma GCC optimize("unroll-loops")`n#endif`n#ifdef _MSC_VER`n#else
+#pragma GCC target("sse,sse2,sse3,ssse3,sse4,popcnt,abm,mmx,avx,avx2")`n#endif
+
+#ifdef _WIN64 
+#define __inline __inline       // Windows平台内联
+#else 
+#define __inline __always_inline // Linux平台强制内联
+#endif
+
+#ifndef __glibc_unlikely`n#define __glibc_unlikely(x) (x)`n#endif`n`nuint32_t g_max_search_time_us = 930000;  // 最大搜索时间（微秒）
+
+// ====================================================
+// 数据结构定义
+// ====================================================
+
+/**
+ * 状态节点结构体
+ * 用于MCTS搜索树中的节点
+ */
+typedef struct tagGameState {
+    double          win_rate_estimate;     // 节点价值（胜率估计）
+    uint32_t        visit_count;           // 访问次数
+    uint32_t        child_node_count;      // 子节点数量
+
+    uint64_t        board_bitmap;          // 棋盘状态（1表示有棋子/箭，0表示空位）
+    uint64_t        piece_position[2];     // 双方棋子位置 [0]=黑棋, [1]=白棋
+    uint64_t        zobrist_hash;          // Zobrist哈希值
+
+    struct tagGameState* child_nodes;      // 子节点数组（动态分配）
+    struct tagGameState* parent_node;      // 父节点
+} GameState;
+
+// 全局状态缓存（内存池）
+uint32_t g_state_pool_top = 0;
+GameState g_state_pool[MAX_STATE_COUNT];
+
+/**
+ * 从内存池分配一个新的状态节点
+ * @return 分配的状态节点指针
+ */
+__inline GameState* allocate_game_state() {
+    return &g_state_pool[g_state_pool_top++];
+}
+
+// 全局变量
+clock_t g_search_start_time = 0;  // 搜索开始时间
+uint32_t g_current_player;        // 当前玩家（0=黑，1=白）
+
+// ====================================================
+// 开局库定义
+// ====================================================
+
+/**
+ * 开局库条目
+ */
+typedef struct {
+    uint64_t board_hash;           // 棋盘哈希值
+    uint16_t recommended_move_count;  // 推荐的走法数量
+    struct {
+        uint8_t from_x : 3;        // 起始位置x坐标
+        uint8_t from_y : 3;        // 起始位置y坐标
+        uint8_t to_x : 3;        // 目标位置x坐标
+        uint8_t to_y : 3;        // 目标位置y坐标
+        uint8_t arrow_x : 3;       // 箭的位置x坐标
+        uint8_t arrow_y : 3;       // 箭的位置y坐标
+        uint16_t probability_score : 10;   // 走法权重（胜率*1000）
+    } recommended_moves[10];       // 推荐的走法（最多10个）
+} OpeningBookEntry;
+
+// 内置开局库数据
+static OpeningBookEntry builtin_opening_book[] = {
+    {
+        .board_hash = 0x1B89874978E6CB5EULL,
+        .recommended_move_count = 1,
+        .recommended_moves = {
+            {.from_x = 5, .from_y = 1, .to_x = 4, .to_y = 1, .arrow_x = 5, .arrow_y = 1, .probability_score = 500 },
+            {.from_x = 0, .from_y = 0, .to_x = 0, .to_y = 0, .arrow_x = 0, .arrow_y = 0, .probability_score = 0 },
+            {.from_x = 0, .from_y = 0, .to_x = 0, .to_y = 0, .arrow_x = 0, .arrow_y = 0, .probability_score = 0 },
+            {.from_x = 0, .from_y = 0, .to_x = 0, .to_y = 0, .arrow_x = 0, .arrow_y = 0, .probability_score = 0 },
+            {.from_x = 0, .from_y = 0, .to_x = 0, .to_y = 0, .arrow_x = 0, .arrow_y = 0, .probability_score = 0 },
+            {.from_x = 0, .from_y = 0, .to_x = 0, .to_y = 0, .arrow_x = 0, .arrow_y = 0, .probability_score = 0 },
+            {.from_x = 0, .from_y = 0, .to_x = 0, .to_y = 0, .arrow_x = 0, .arrow_y = 0, .probability_score = 0 },
+            {.from_x = 0, .from_y = 0, .to_x = 0, .to_y = 0, .arrow_x = 0, .arrow_y = 0, .probability_score = 0 },
+            {.from_x = 0, .from_y = 0, .to_x = 0, .to_y = 0, .arrow_x = 0, .arrow_y = 0, .probability_score = 0 },
+            {.from_x = 0, .from_y = 0, .to_x = 0, .to_y = 0, .arrow_x = 0, .arrow_y = 0, .probability_score = 0 },
+        }
+    }
+};
+
+static const int g_builtin_opening_book_size = sizeof(builtin_opening_book) / sizeof(OpeningBookEntry);
+bool g_opening_book_available = true;  // 内置开局库始终可用
+
+// ====================================================
+// Zobrist哈希
+// ====================================================
+
+// Zobrist哈希表
+static uint64_t g_zobrist_table[64][3];  // [位置][类型:0=空,1=黑棋,2=白棋]
+static uint64_t g_zobrist_player_turn;   // 轮到哪一方
+
+/**
+ * 初始化Zobrist哈希表
+ */
+void initialize_zobrist() {
+    static bool zobrist_initialized = false;
+    if (zobrist_initialized) return;
+
+    // 使用固定的随机种子以确保可重复性
+    srand(0xABCD1234);
+
+    // 初始化棋盘位置的随机数
+    for (int position = 0; position < 64; position++) {
+        for (int piece_type = 0; piece_type < 3; piece_type++) {
+            g_zobrist_table[position][piece_type] = 0;
+            for (int k = 0; k < 4; k++) {
+                g_zobrist_table[position][piece_type] = (g_zobrist_table[position][piece_type] << 16) | (rand() & 0xFFFF);
+            }
+        }
+    }
+
+    // 初始化先手随机数
+    g_zobrist_player_turn = 0;
+    for (int k = 0; k < 4; k++) {
+        g_zobrist_player_turn = (g_zobrist_player_turn << 16) | (rand() & 0xFFFF);
+    }
+
+    zobrist_initialized = true;
+}
+
+/**
+ * 计算棋盘状态的哈希值
+ * @param game_state 棋盘状态
+ * @param player_turn 当前玩家
+ * @return 哈希值
+ */
+uint64_t calculate_board_hash(GameState* game_state, int player_turn) {
+    uint64_t hash_value = 0;
+
+    // 处理黑棋
+    uint64_t black_pieces = game_state->piece_position[PLAYER_BLACK];
+    while (black_pieces) {
+        int position = __builtin_ctzll(black_pieces);
+        hash_value ^= g_zobrist_table[position][1];  // 黑棋
+        black_pieces &= black_pieces - 1;
+    }
+
+    // 处理白棋
+    uint64_t white_pieces = game_state->piece_position[PLAYER_WHITE];
+    while (white_pieces) {
+        int position = __builtin_ctzll(white_pieces);
+        hash_value ^= g_zobrist_table[position][2];  // 白棋
+        white_pieces &= white_pieces - 1;
+    }
+
+    // 处理箭（棋盘上有但既不是黑棋也不是白棋的位置）
+    uint64_t arrow_positions = game_state->board_bitmap & ~(game_state->piece_position[PLAYER_BLACK] | game_state->piece_position[PLAYER_WHITE]);
+    while (arrow_positions) {
+        int position = __builtin_ctzll(arrow_positions);
+        hash_value ^= g_zobrist_table[position][0];  // 箭
+        arrow_positions &= arrow_positions - 1;
+    }
+
+    // 添加当前玩家信息
+    if (player_turn == PLAYER_BLACK) {
+        hash_value ^= g_zobrist_player_turn;
+    }
+
+    return hash_value;
+}
+
+/**
+ * 更新哈希值（移动棋子）
+ * @param current_hash 旧的哈希值
+ * @param from_position 旧位置
+ * @param to_position 新位置
+ * @param arrow_position 箭的位置
+ * @param piece_type 棋子类型 (1=黑棋, 2=白棋)
+ * @param previous_turn 当前玩家
+ * @param next_turn 下一个玩家
+ * @return 新的哈希值
+ */
+uint64_t update_board_hash(uint64_t current_hash, int from_position, int to_position, int arrow_position,
+    int piece_type, int previous_turn, int next_turn) {
+    // 移除旧位置的棋子
+    current_hash ^= g_zobrist_table[from_position][piece_type];
+
+    // 添加新位置的棋子
+    current_hash ^= g_zobrist_table[to_position][piece_type];
+
+    // 添加箭
+    current_hash ^= g_zobrist_table[arrow_position][0];
+
+    // 切换玩家（移除旧玩家，添加新玩家）
+    if (previous_turn != next_turn) {
+        current_hash ^= g_zobrist_player_turn;
+    }
+
+    return current_hash;
+}
+
+// ====================================================
+// 开局库查询
+// ====================================================
+
+/**
+ * 查询开局库
+ * @param board_hash 棋盘哈希值
+ * @param book_entry 输出：找到的开局库条目
+ * @return 是否找到匹配项
+ */
+bool lookup_opening_book(uint64_t board_hash, OpeningBookEntry** book_entry) {
+    if (!g_opening_book_available) return false;
+
+    // 在内置开局库中线性查找
+    for (int i = 0; i < g_builtin_opening_book_size; i++) {
+        if (builtin_opening_book[i].board_hash == board_hash && builtin_opening_book[i].recommended_move_count > 0) {
+            *book_entry = &builtin_opening_book[i];
+            return true;
+        }
+    }
+
+    return false;
+}
+
+/**
+ * 根据权重随机选择一个开局库走法
+ * @param book_entry 开局库条目
+ * @param from_x,from_y 输出：起始位置
+ * @param to_x,to_y 输出：目标位置
+ * @param arrow_x,arrow_y 输出：箭的位置
+ * @return 是否成功选择走法
+ */
+bool choose_opening_move(OpeningBookEntry* book_entry, int* from_x, int* from_y,
+    int* to_x, int* to_y, int* arrow_x, int* arrow_y) {
+    if (book_entry->recommended_move_count == 0) return false;
+
+    // 计算总权重
+    uint32_t total_weight = 0;
+    for (int i = 0; i < book_entry->recommended_move_count; i++) {
+        total_weight += book_entry->recommended_moves[i].probability_score;
+    }
+
+    if (total_weight == 0) return false;
+
+    // 随机选择一个走法（基于权重）
+    uint32_t random_value = rand() % total_weight;
+    uint32_t cumulative_weight = 0;
+
+    for (int i = 0; i < book_entry->recommended_move_count; i++) {
+        cumulative_weight += book_entry->recommended_moves[i].probability_score;
+        if (random_value < cumulative_weight) {
+            *from_x = book_entry->recommended_moves[i].from_x;
+            *from_y = book_entry->recommended_moves[i].from_y;
+            *to_x = book_entry->recommended_moves[i].to_x;
+            *to_y = book_entry->recommended_moves[i].to_y;
+            *arrow_x = book_entry->recommended_moves[i].arrow_x;
+            *arrow_y = book_entry->recommended_moves[i].arrow_y;
+            return true;
+        }
+    }
+
+    // 如果上面没有选择到（理论上不会发生），选择第一个
+    *from_x = book_entry->recommended_moves[0].from_x;
+    *from_y = book_entry->recommended_moves[0].from_y;
+    *to_x = book_entry->recommended_moves[0].to_x;
+    *to_y = book_entry->recommended_moves[0].to_y;
+    *arrow_x = book_entry->recommended_moves[0].arrow_x;
+    *arrow_y = book_entry->recommended_moves[0].arrow_y;
+    return true;
+}
+
+// ====================================================
+// 调试函数
+// ====================================================
+
+/**
+ * 打印当前棋盘状态
+ * @param game_state 状态节点
+ */
+void display_chessboard(GameState* game_state) {
+    for (int position = 0; position < 64; position++) {
+        // 每行开始前换行
+        if (!(position & 0x7)) {
+            fprintf(stderr, "\n");
+        }
+
+        if (game_state->board_bitmap & (1ull << position)) {
+            // 有棋子的位置
+            if (game_state->piece_position[g_current_player] & (1ull << position)) {
+                fprintf(stderr, "A ");  // 己方棋子
+            }
+            else if (game_state->piece_position[1 - g_current_player] & (1ull << position)) {
+                fprintf(stderr, "B ");  // 对方棋子
+            }
+            else {
+                fprintf(stderr, "X ");  // 箭
+            }
+        }
+        else {
+            fprintf(stderr, "_ ");      // 空位
+        }
+    }
+    fprintf(stderr, "\n");
+}
+
+/**
+ * 简单打印棋盘位图
+ * @param board_bitmap 棋盘位图
+ */
+void print_board_bitmap(uint64_t board_bitmap) {
+    for (int position = 0; position < 64; position++) {
+        if (!(position & 0x7)) {
+            putchar('\n');
+        }
+
+        if (board_bitmap & (1ull << position)) {
+            printf("X ");  // 有障碍
+        }
+        else {
+            printf("_ ");  // 空位
+        }
+    }
+    puts("");
+}
+
+// ====================================================
+// 评估引擎
+// ====================================================
+
+#define min(x, y) ((x) < (y) ? (x) : (y))
+
+// 距离表的缓存（AVX2对齐）
+__attribute__((aligned(32))) uint64_t g_king_distance_self[64];    // 己方国王距离表
+__attribute__((aligned(32))) uint64_t g_king_distance_opponent[64];   // 对方国王距离表
+__attribute__((aligned(32))) uint64_t g_queen_distance_self[64];   // 己方皇后距离表
+__attribute__((aligned(32))) uint64_t g_queen_distance_opponent[64];  // 对方皇后距离表
+
+// 最大距离
+uint8_t g_max_king_distance_self;
+uint8_t g_max_king_distance_opponent;
+uint8_t g_max_queen_distance_self;
+uint8_t g_max_queen_distance_opponent;
+
+// 调试计数器
+uint32_t g_evaluation_counter = 0;
+uint32_t g_duplicate_state_counter = 0;
+
+/**
+ * 评估函数参数表
+ * 不同回合（棋子数量）使用不同的权重参数
+ * 每行参数: [领地权重1, 领地权重2, 位置权重1, 位置权重2, 机动性权重]
+ */
+double g_evaluation_network[28][5] = {
+    { 0.07747249543793637 ,0.05755603330699520 ,0.64627749023334498 ,0.70431267004292740 ,0.02438131097879579 },
+    { 0.05093047840251742 ,0.06276538622537013 ,0.69898059004821581 ,0.66192728970497727 ,0.02362598306372760 },
+    { 0.06036622274224539 ,0.06253298199478051 ,0.60094570235521628 ,0.67719126081076242 ,0.01873142786640421 },
+    { 0.07597341130849308 ,0.06952095866594065 ,0.69061184234845333 ,0.67989394578528273 ,0.02098781856298665 },
+    { 0.08083391263897154 ,0.08815144960484271 ,0.58981849824874917 ,0.54664183543259470 ,0.02318479501373763 },
+    { 0.09155731347030857 ,0.08397548702353251 ,0.56392480085083986 ,0.54319242129550227 ,0.02317401477849946 },
+    { 0.10653095458609237 ,0.10479793630859575 ,0.54840938009286515 ,0.53023658889860381 ,0.02084758939889652 },
+    { 0.11534143744086589 ,0.11515706838023705 ,0.53325566869906469 ,0.52423368303553451 ,0.02237127451593010 },
+    { 0.12943854523554690 ,0.12673742164114844 ,0.50841519367287034 ,0.52208373964502879 ,0.02490545306630711 },
+    { 0.12882484162931859 ,0.13946973532382280 ,0.49621839819987758 ,0.51776460089353364 ,0.03045473763611049 },
+    { 0.13701233819832731 ,0.15338865590616042 ,0.47601466399954588 ,0.51500429509193190 ,0.03249896738636078 },
+    { 0.14530543898518938 ,0.15565237403332051 ,0.45365475320199057 ,0.50934623406618500 ,0.03830491784046246 },
+    { 0.14521045986025419 ,0.16388365022083374 ,0.44531995327608060 ,0.50517597255948953 ,0.04864124027084386 },
+    { 0.13750613208150655 ,0.16326621164859418 ,0.43619350878439399 ,0.50328876650721398 ,0.05912794240603884 },
+    { 0.13565263325548560 ,0.15529175902376631 ,0.42382223063419649 ,0.50288212924827379 ,0.07437679521343679 },
+    { 0.12382760525087406 ,0.10361944098637088 ,0.50487335391408680 ,0.55808747967333505 ,0.02791980213792046 },
+    { 0.11809487853625075 ,0.14632850080535232 ,0.40738388113193924 ,0.41782129616811122 ,0.10308050317730764 },
+    { 0.10805473551960752 ,0.15043981450391137 ,0.40520488356004784 ,0.43073574707030956 ,0.10967613304465569 },
+    { 0.09668240983912251 ,0.15666221434557865 ,0.40215634987047013 ,0.44165716517577754 ,0.10906426061069142 },
+    { 0.10585263971502025 ,0.16319090506614549 ,0.38220029690800922 ,0.45465487463858675 ,0.10062997439277618 },
+    { 0.11123671989551248 ,0.15516074827095279 ,0.36904588744714037 ,0.46534418781939937 ,0.09118229977179015 },
+    { 0.12535649823409767 ,0.10492555251930048 ,0.35567115915540981 ,0.48043579160677637 ,0.08337580273275977 },
+    { 0.28657326967317970 ,0.16655279311197080 ,0.38060545469477008 ,0.42472577515072628 ,0.10316994796202342 },
+    { 0.07143084940040888 ,0.16655279311197080 ,0.36658063304313299 ,0.39520049916162908 ,0.02194263694320541 },
+    { 0.07143084940040888 ,0.16655279311197080 ,0.36658063304313299 ,0.39520049916162908 ,0.02194263694320541 },
+    { 0.07143084940040888 ,0.16655279311197080 ,0.36658063304313299 ,0.39520049916162908 ,0.02194263694320541 },
+    { 0.07143084940040888 ,0.16655279311197080 ,0.36658063304313299 ,0.39520049916162908 ,0.02194263694320541 },
+    { 0.07143084940040888 ,0.14627749023334498 ,0.36658063304313299 ,0.39520049916162908 ,0.02194263694320541 }
+};
+
+// ====================================================
+// 距离计算函数（BFS算法）
+// ====================================================
+
+/**
+ * 使用AVX2指令计算国王（单步移动）距离表
+ * @param game_state 状态节点
+ * @param board_bitmap 棋盘位图
+ * @param start_position 起始位置
+ * @param reachable_positions 输出：各距离可到达的位置
+ * @param max_distance 输出：最大距离
+ */
+__inline void compute_king_distance_avx2(GameState* game_state, uint64_t board_bitmap, uint64_t start_position,
+    uint64_t* reachable_positions, uint8_t* max_distance) {
+    uint8_t  current_distance = 0;
+    uint64_t previous_reachable = start_position;
+    uint64_t current_reachable;
+
+    board_bitmap = ~board_bitmap;  // 反转，1表示可走位置
+    reachable_positions[current_distance++] = start_position;
+
+    // AVX2掩码：处理棋盘边界
+    __m256i left_boundary_mask = _mm256_set_epi64x(
+        0xfefefefefefefefe,  // 左边界掩码
+        0x7f7f7f7f7f7f7f7f,  // 右边界掩码  
+        0xffffffffffffffff,  // 垂直掩码
+        0xfefefefefefefefe   // 对角线掩码
+    );
+
+    __m256i right_boundary_mask = _mm256_set_epi64x(
+        0x7f7f7f7f7f7f7f7f,
+        0xfefefefefefefefe,
+        0xffffffffffffffff,
+        0x7f7f7f7f7f7f7f7f
+    );
+
+    __m256i move_offsets = _mm256_set_epi64x(1, 7, 8, 9);  // 8个方向的移动步长
+
+    // BFS循环
+    for (;;) {
+        __m256i current_position = _mm256_set1_epi64x(reachable_positions[current_distance - 1]);
+
+        // 计算8个方向移动后的位置
+        __m256i possible_moves = _mm256_or_si256(
+            _mm256_or_si256(
+                _mm256_srlv_epi64(_mm256_and_si256(current_position, left_boundary_mask), move_offsets),
+                _mm256_sllv_epi64(_mm256_and_si256(current_position, right_boundary_mask), move_offsets)
+            ),
+            current_position
+        );
+
+        // 提取结果并与可走位置取交
+        current_reachable = (
+            _mm256_extract_epi64(possible_moves, 0) |
+            _mm256_extract_epi64(possible_moves, 1) |
+            _mm256_extract_epi64(possible_moves, 2) |
+            _mm256_extract_epi64(possible_moves, 3)
+            ) & board_bitmap;
+
+        // 如果没有新位置可达，结束BFS
+        if (current_reachable == previous_reachable) {
+            reachable_positions[current_distance] = current_reachable;
+            break;
+        }
+
+        previous_reachable = current_reachable;
+        reachable_positions[current_distance++] = current_reachable;
+    }
+
+    // 转换为增量形式：reachable_positions[i] = 距离i可达的位置
+    for (int i = current_distance - 1; i > 1; i--) {
+        reachable_positions[i] ^= reachable_positions[i - 1];
+    }
+
+    *max_distance = current_distance;
+}
+
+/**
+ * 使用AVX2指令计算皇后（多步移动）距离表
+ * @param board_bitmap 棋盘位图
+ * @param start_position 起始位置
+ * @param reachable_positions 输出：各距离可到达的位置
+ * @param max_distance 输出：最大距离
+ */
+__inline void compute_queen_distance_avx2(uint64_t board_bitmap, uint64_t start_position,
+    uint64_t* reachable_positions, uint8_t* max_distance) {
+    uint8_t  current_distance = 0;
+    uint64_t current_reachable;
+    uint64_t previous_reachable = start_position;
+
+    board_bitmap = ~board_bitmap;
+    reachable_positions[current_distance++] = start_position;
+
+    // AVX2掩码和步长
+    __m256i left_boundary_mask = _mm256_set_epi64x(
+        0xfefefefefefefefe,
+        0x7f7f7f7f7f7f7f7f,
+        0xffffffffffffffff,
+        0xfefefefefefefefe
+    );
+
+    __m256i right_boundary_mask = _mm256_set_epi64x(
+        0x7f7f7f7f7f7f7f7f,
+        0xfefefefefefefefe,
+        0xffffffffffffffff,
+        0x7f7f7f7f7f7f7f7f
+    );
+
+    __m256i move_offsets = _mm256_set_epi64x(1, 7, 8, 9);
+    __m256i board_mask = _mm256_set1_epi64x(board_bitmap);
+
+    // BFS循环
+    for (;;) {
+        __m256i left_positions[8], right_positions[8], possible_moves;
+
+        current_reachable = 0;
+        left_positions[0] = _mm256_set1_epi64x(reachable_positions[current_distance - 1]);
+        right_positions[0] = _mm256_set1_epi64x(reachable_positions[current_distance - 1]);
+
+        // 计算8个方向上最多7步的移动
+        for (int step = 1; step <= 7; step++) {
+            left_positions[step] = _mm256_and_si256(
+                _mm256_srlv_epi64(_mm256_and_si256(left_positions[step - 1], left_boundary_mask), move_offsets),
+                board_mask
+            );
+            right_positions[step] = _mm256_and_si256(
+                _mm256_sllv_epi64(_mm256_and_si256(right_positions[step - 1], right_boundary_mask), move_offsets),
+                board_mask
+            );
+        }
+
+        // 合并所有方向所有步数的结果
+        possible_moves = _mm256_or_si256(
+            _mm256_or_si256(
+                _mm256_or_si256(
+                    _mm256_or_si256(left_positions[0], left_positions[1]),
+                    _mm256_or_si256(left_positions[2], left_positions[3])
+                ),
+                _mm256_or_si256(
+                    _mm256_or_si256(left_positions[4], left_positions[5]),
+                    _mm256_or_si256(left_positions[6], left_positions[7])
+                )
+            ),
+            _mm256_or_si256(
+                _mm256_or_si256(
+                    _mm256_or_si256(right_positions[0], right_positions[1]),
+                    _mm256_or_si256(right_positions[2], right_positions[3])
+                ),
+                _mm256_or_si256(
+                    _mm256_or_si256(right_positions[4], right_positions[5]),
+                    _mm256_or_si256(right_positions[6], right_positions[7])
+                )
+            )
+        );
+
+        // 提取结果
+        current_reachable = (
+            _mm256_extract_epi64(possible_moves, 0) |
+            _mm256_extract_epi64(possible_moves, 1) |
+            _mm256_extract_epi64(possible_moves, 2) |
+            _mm256_extract_epi64(possible_moves, 3)
+            ) & board_bitmap;
+
+        // 收敛检查
+        if (current_reachable == previous_reachable) {
+            reachable_positions[current_distance] = current_reachable;
+            break;
+        }
+
+        previous_reachable = current_reachable;
+        reachable_positions[current_distance++] = current_reachable;
+    }
+
+    // 转换为增量形式
+    for (int i = current_distance - 1; i > 1; i--) {
+        reachable_positions[i] ^= reachable_positions[i - 1];
+    }
+
+    *max_distance = current_distance;
+}
+
+// ====================================================
+// 特征计算函数
+// ====================================================
+
+/**
+ * 计算皇后移动的机动性（自由度）
+ * @param board_bitmap 棋盘位图
+ * @param queen_position 皇后位置
+ * @return 机动性分数
+ */
+__inline double calculate_mobility_avx2(uint64_t board_bitmap, uint64_t queen_position) {
+    board_bitmap = ~board_bitmap;  // 可走位置
+    double mobility_score = 0;
+
+    // AVX2掩码和步长
+    __m256i left_boundary_mask = _mm256_set_epi64x(
+        0xfefefefefefefefe,
+        0x7f7f7f7f7f7f7f7f,
+        0xffffffffffffffff,
+        0xfefefefefefefefe
+    );
+
+    __m256i right_boundary_mask = _mm256_set_epi64x(
+        0x7f7f7f7f7f7f7f7f,
+        0xfefefefefefefefe,
+        0xffffffffffffffff,
+        0x7f7f7f7f7f7f7f7f
+    );
+
+    __m256i move_offsets = _mm256_set_epi64x(1, 7, 8, 9);
+    __m256i board_mask = _mm256_set1_epi64x(board_bitmap);
+
+    __m256i left_position, right_position;
+    left_position = right_position = _mm256_set1_epi64x(queen_position);
+
+    // 计算1-7步的移动能力
+    for (int step = 1; step <= 7; step++) {
+        // 向8个方向移动i步
+        left_position = _mm256_and_si256(
+            _mm256_srlv_epi64(_mm256_and_si256(left_position, left_boundary_mask), move_offsets),
+            board_mask
+        );
+        right_position = _mm256_and_si256(
+            _mm256_sllv_epi64(_mm256_and_si256(right_position, right_boundary_mask), move_offsets),
+            board_mask
+        );
+
+        // 合并结果
+        __m256i possible_moves = _mm256_or_si256(left_position, right_position);
+
+        uint64_t current_moves =
+            _mm256_extract_epi64(possible_moves, 0) |
+            _mm256_extract_epi64(possible_moves, 1) |
+            _mm256_extract_epi64(possible_moves, 2) |
+            _mm256_extract_epi64(possible_moves, 3);
+
+        // 计算下一步的可选位置
+        __m256i next_moves = _mm256_or_si256(
+            _mm256_and_si256(
+                _mm256_srlv_epi64(_mm256_and_si256(_mm256_set1_epi64x(current_moves), left_boundary_mask), move_offsets),
+                board_mask
+            ),
+            _mm256_and_si256(
+                _mm256_sllv_epi64(_mm256_and_si256(_mm256_set1_epi64x(current_moves), right_boundary_mask), move_offsets),
+                board_mask
+            )
+        );
+
+        uint64_t next_moves_bitmap = (
+            _mm256_extract_epi64(next_moves, 0) |
+            _mm256_extract_epi64(next_moves, 1) |
+            _mm256_extract_epi64(next_moves, 2) |
+            _mm256_extract_epi64(next_moves, 3)
+            );
+
+        // 距离越远，权重越小
+        mobility_score += __builtin_popcountll(next_moves_bitmap) / (step * 1.0);
+    }
+
+    return mobility_score;
+}
+
+/**
+ * 计算皇后位置优势
+ * 公式: 2 * Σ(2^(-距离)) * 棋子数
+ * @param self_reachable_positions 己方距离表
+ * @param self_max_distance 己方最大距离
+ * @param opponent_reachable_positions 对方距离表
+ * @param opponent_max_distance 对方最大距离
+ * @return 位置优势分数
+ */
+__inline double calculate_queen_position_advantage(uint64_t* self_reachable_positions, uint8_t self_max_distance,
+    uint64_t* opponent_reachable_positions, uint8_t opponent_max_distance) {
+    double advantage_score = 0, power_value;
+    uint64_t reachable_cells, distance, power_bits;
+
+    union {
+        uint64_t integer_representation;
+        double double_representation;
+    } float_converter;
+
+    // 计算己方位置优势
+    for (int distance_index = 1; distance_index < self_max_distance; distance_index++) {
+        reachable_cells = self_reachable_positions[distance_index];
+        distance = distance_index;
+        // 快速计算2^(-distance): 通过浮点数位操作
+        power_bits = 0x3ff0000000000000ull - (distance << 52);
+        float_converter.integer_representation = power_bits;
+        power_value = float_converter.double_representation;
+        advantage_score += __builtin_popcountll(reachable_cells) * power_value;
+    }
+
+    // 减去对方位置优势
+    for (int distance_index = 1; distance_index < opponent_max_distance; distance_index++) {
+        reachable_cells = opponent_reachable_positions[distance_index];
+        distance = distance_index;
+        power_bits = 0x3ff0000000000000ull - (distance << 52);
+        float_converter.integer_representation = power_bits;
+        power_value = float_converter.double_representation;
+        advantage_score -= __builtin_popcountll(reachable_cells) * power_value;
+    }
+
+    return 2 * advantage_score;
+}
+
+/**
+ * 计算国王位置优势
+ * @param self_reachable_positions 己方国王距离表
+ * @param self_max_distance 己方最大距离
+ * @param opponent_reachable_positions 对方国王距离表
+ * @param opponent_max_distance 对方最大距离
+ * @return 国王位置优势分数
+ */
+__inline double calculate_king_position_advantage(uint64_t* self_reachable_positions, uint8_t self_max_distance,
+    uint64_t* opponent_reachable_positions, uint8_t opponent_max_distance) {
+    double position_score = 0;
+
+    // 计算共同可达区域和独占区域
+    uint64_t shared_area = (self_reachable_positions[self_max_distance] & opponent_reachable_positions[opponent_max_distance]);
+    uint64_t self_exclusive_area = (self_reachable_positions[self_max_distance] & (~shared_area));
+    uint64_t opponent_exclusive_area = (opponent_reachable_positions[opponent_max_distance] & (~shared_area));
+
+    // 在共同区域中，距离越近优势越大
+    for (int distance_index = 1; distance_index < self_max_distance; distance_index++) {
+        position_score -= __builtin_popcountll(self_reachable_positions[distance_index] & shared_area) * distance_index / 6.0;
+    }
+
+    for (int distance_index = 1; distance_index < opponent_max_distance; distance_index++) {
+        position_score += __builtin_popcountll(opponent_reachable_positions[distance_index] & shared_area) * distance_index / 6.0;
+    }
+
+    // 独占区域直接算作优势
+    position_score += __builtin_popcountll(self_exclusive_area) - __builtin_popcountll(opponent_exclusive_area);
+
+    return position_score;
+}
+
+/**
+ * 快速计算领地控制
+ * BFS比较双方谁能更快到达每个位置
+ * @param self_reachable_positions 己方距离表
+ * @param self_max_distance 己方最大距离
+ * @param opponent_reachable_positions 对方距离表
+ * @param opponent_max_distance 对方最大距离
+ * @return 领地控制分数（己方占优为正）
+ */
+__inline int32_t calculate_territory_control_fast(uint64_t* self_reachable_positions, uint8_t self_max_distance,
+    uint64_t* opponent_reachable_positions, uint8_t opponent_max_distance) {
+    int32_t territory_score = 0;
+    uint64_t allocated_area = 0;  // 已分配的区域
+
+    // 比较相同距离的到达能力
+    for (int distance_index = 1; distance_index < self_max_distance && distance_index < opponent_max_distance; distance_index++) {
+        // 己方能先到达的位置
+        territory_score += __builtin_popcountll(self_reachable_positions[distance_index] & (~allocated_area));
+        // 对方能先到达的位置
+        territory_score -= __builtin_popcountll(opponent_reachable_positions[distance_index] & (~allocated_area));
+        // 标记已分配
+        allocated_area |= self_reachable_positions[distance_index] | opponent_reachable_positions[distance_index];
+    }
+
+    // 己方有更远距离（能到达对方不能到达的区域）
+    for (int distance_index = self_max_distance; distance_index < opponent_max_distance; distance_index++) {
+        territory_score -= __builtin_popcountll(opponent_reachable_positions[distance_index] & (~allocated_area));
+        allocated_area |= opponent_reachable_positions[distance_index];
+    }
+
+    // 对方有更远距离
+    for (int distance_index = opponent_max_distance; distance_index < self_max_distance; distance_index++) {
+        territory_score += __builtin_popcountll(self_reachable_positions[distance_index] & (~allocated_area));
+        allocated_area |= self_reachable_positions[distance_index];
+    }
+
+    return territory_score;
+}
+
+/**
+ * 超时检查
+ * @return true如果超时，否则false
+ */
+__inline bool is_search_timeout() {
+    return (((clock() - g_search_start_time)) > g_max_search_time_us);
+}
+
+// ====================================================
+// 主评估函数
+// ====================================================
+
+/**
+ * 综合评估函数
+ * 计算当前局面对己方的胜率估计（0-1之间）
+ * @param game_state 状态节点
+ * @return 胜率估计（0=必输，1=必赢，0.5=均势）
+ */
+__inline double evaluate_board_position(GameState* game_state) {
+    uint64_t board_bitmap = game_state->board_bitmap;
+    ++g_evaluation_counter;
+
+    double final_score = 0.0, queen_territory = 0, king_territory = 0, queen_position = 0, king_position = 0, mobility_difference = 0;
+
+    // 1. 计算国王和皇后的距离表
+    compute_king_distance_avx2(game_state, board_bitmap, game_state->piece_position[g_current_player],
+        g_king_distance_self, &g_max_king_distance_self);
+    compute_king_distance_avx2(game_state, board_bitmap, game_state->piece_position[1 - g_current_player],
+        g_king_distance_opponent, &g_max_king_distance_opponent);
+
+    compute_queen_distance_avx2(board_bitmap, game_state->piece_position[g_current_player],
+        g_queen_distance_self, &g_max_queen_distance_self);
+    compute_queen_distance_avx2(board_bitmap, game_state->piece_position[1 - g_current_player],
+        g_queen_distance_opponent, &g_max_queen_distance_opponent);
+
+    // 2. 计算各种特征
+    queen_territory = calculate_territory_control_fast(g_queen_distance_self, g_max_queen_distance_self,
+        g_queen_distance_opponent, g_max_queen_distance_opponent);
+    king_territory = calculate_territory_control_fast(g_king_distance_self, g_max_king_distance_self,
+        g_king_distance_opponent, g_max_king_distance_opponent);
+
+    queen_position = calculate_queen_position_advantage(g_queen_distance_self, g_max_queen_distance_self,
+        g_queen_distance_opponent, g_max_queen_distance_opponent);
+    king_position = calculate_king_position_advantage(g_king_distance_self, g_max_king_distance_self,
+        g_king_distance_opponent, g_max_king_distance_opponent);
+
+    mobility_difference = calculate_mobility_avx2(board_bitmap, game_state->piece_position[g_current_player]) -
+        calculate_mobility_avx2(board_bitmap, game_state->piece_position[1 - g_current_player]);
+
+    // 3. 根据回合数选择权重参数
+    uint32_t current_turn = (__builtin_popcountll(game_state->board_bitmap) - 8) >> 1;
+
+    // 4. 加权求和得到原始分数
+    final_score = (
+        g_evaluation_network[current_turn][0] * queen_territory +
+        g_evaluation_network[current_turn][1] * king_territory +
+        g_evaluation_network[current_turn][2] * queen_position +
+        g_evaluation_network[current_turn][3] * king_position +
+        g_evaluation_network[current_turn][4] * mobility_difference
+        ) * 0.20;  // 全局缩放因子
+
+    // 5. 通过sigmoid函数转换为胜率
+    return 1 / (1 + exp(-final_score));
+}
+
+// ====================================================
+// 走法生成（整合哈希更新）
+// ====================================================
+
+/**
+ * 计算皇后可以移动到的所有位置（一步之内）
+ * @param board_bitmap 棋盘位图
+ * @param queen_position 皇后当前位置
+ * @return 可移动位置的位图
+ */
+__inline uint64_t get_queen_moves_avx2(uint64_t board_bitmap, uint64_t queen_position) {
+    __m256i left_position, right_position, possible_moves = { 0 };
+    uint64_t valid_moves;
+
+    // AVX2掩码和步长
+    __m256i left_boundary_mask = _mm256_set_epi64x(
+        0xfefefefefefefefe,
+        0x7f7f7f7f7f7f7f7f,
+        0xffffffffffffffff,
+        0xfefefefefefefefe
+    );
+
+    __m256i right_boundary_mask = _mm256_set_epi64x(
+        0x7f7f7f7f7f7f7f7f,
+        0xfefefefefefefefe,
+        0xffffffffffffffff,
+        0x7f7f7f7f7f7f7f7f
+    );
+
+    __m256i move_offsets = _mm256_set_epi64x(1, 7, 8, 9);
+    __m256i board_mask = _mm256_set1_epi64x(board_bitmap);
+
+    left_position = right_position = _mm256_set1_epi64x(queen_position);
+
+    // 向8个方向最多走7步
+    for (int step = 1; step <= 7; step++) {
+        left_position = _mm256_and_si256(
+            _mm256_srlv_epi64(_mm256_and_si256(left_position, left_boundary_mask), move_offsets),
+            board_mask
+        );
+        right_position = _mm256_and_si256(
+            _mm256_sllv_epi64(_mm256_and_si256(right_position, right_boundary_mask), move_offsets),
+            board_mask
+        );
+
+        possible_moves = _mm256_or_si256(
+            _mm256_or_si256(left_position, right_position),
+            possible_moves
+        );
+    }
+
+    valid_moves = (
+        _mm256_extract_epi64(possible_moves, 0) |
+        _mm256_extract_epi64(possible_moves, 1) |
+        _mm256_extract_epi64(possible_moves, 2) |
+        _mm256_extract_epi64(possible_moves, 3)
+        ) & board_bitmap;
+
+    return valid_moves;
+}
+
+/**
+ * 生成当前玩家的所有合法走法（整合哈希）
+ * @param game_state 当前状态
+ * @param current_player 当前玩家（0=黑，1=白）
+ */
+__inline void generate_all_moves_with_hash(GameState* game_state, int current_player) {
+    uint64_t temp_board = game_state->board_bitmap;
+    uint64_t player_pieces;
+    GameState* first_child = NULL;
+    uint64_t generated_count = 0;
+
+    player_pieces = game_state->piece_position[current_player];
+
+    // 遍历所有己方棋子
+    for (; player_pieces;) {
+        uint64_t current_piece = player_pieces & (-player_pieces);  // 提取最低位的棋子
+        uint64_t possible_moves = 0;
+        player_pieces ^= current_piece;  // 移除当前棋子
+
+        // 计算当前棋子可以移动的位置
+        possible_moves = get_queen_moves_avx2(~temp_board, current_piece);
+
+        // 枚举所有可能的移动位置
+        for (; possible_moves;) {
+            uint64_t new_position = possible_moves & (-possible_moves);  // 提取一个目标位置
+            possible_moves ^= new_position;  // 移除已处理的位置
+
+            // 移动棋子到新位置
+            temp_board ^= (new_position ^ current_piece);
+
+            // 计算可以放箭的位置
+            uint64_t arrow_positions = get_queen_moves_avx2(~temp_board, new_position);
+
+            // 枚举所有放箭位置
+            for (; arrow_positions;) {
+                uint64_t arrow_position = arrow_positions & (-arrow_positions);
+                arrow_positions -= arrow_position;
+
+                // 放置箭
+                temp_board ^= arrow_position;
+
+                // 创建新状态节点
+                GameState* new_state = allocate_game_state();
+                ++generated_count;
+
+                // 初始化子节点链表
+                if (__glibc_unlikely(first_child == NULL)) {
+                    first_child = new_state;
+                }
+
+                // 设置新状态
+                new_state->board_bitmap = temp_board;
+                new_state->piece_position[0] = game_state->piece_position[0];
+                new_state->piece_position[1] = game_state->piece_position[1];
+                new_state->piece_position[current_player] ^= (new_position ^ current_piece);
+                new_state->parent_node = game_state;
+
+                // 计算哈希值
+                int start_pos = __builtin_ctzll(current_piece);
+                int end_pos = __builtin_ctzll(new_position);
+                int arrow_pos_idx = __builtin_ctzll(arrow_position);
+                int piece_type = (current_player == PLAYER_BLACK) ? 1 : 2;
+
+                // 如果有父节点的哈希值，就更新，否则计算新的
+                if (game_state->zobrist_hash != 0) {
+                    new_state->zobrist_hash = update_board_hash(game_state->zobrist_hash, start_pos, end_pos,
+                        arrow_pos_idx, piece_type, current_player, 1 - current_player);
+                }
+                else {
+                    // 如果没有父节点哈希，计算完整哈希
+                    new_state->zobrist_hash = calculate_board_hash(new_state, 1 - current_player);
+                }
+
+                // 评估新状态（己方视角的胜率）
+                new_state->win_rate_estimate = (g_current_player == (uint32_t)current_player) ?
+                    evaluate_board_position(new_state) : 1 - evaluate_board_position(new_state);
+
+                // 撤销放箭
+                temp_board ^= arrow_position;
+            }
+
+            // 撤销棋子移动
+            temp_board ^= (new_position ^ current_piece);
+        }
+    }
+
+    // 更新状态信息
+    game_state->child_node_count = generated_count;
+    game_state->child_nodes = first_child;
+}
+
+// ====================================================
+// MCTS核心算法（整合开局库）
+// ====================================================
+
+double g_uct_exploration_constant;  // UCT探索常数
+uint64_t g_uct_calculation_counter = 0;
+
+/**
+ * 计算UCT（Upper Confidence Bound for Trees）值
+ * 用于在MCTS中选择最有潜力的节点
+ * 公式: Q/(1+N) + C*sqrt(ln(Np)/(1+N))
+ * @param child_state 子节点状态
+ * @return UCT值
+ */
+__inline double calculate_uct_value(GameState* child_state) {
+    ++g_uct_calculation_counter;
+    return child_state->win_rate_estimate / (1 + child_state->visit_count) +
+        g_uct_exploration_constant * __builtin_sqrt(__builtin_log(child_state->parent_node->visit_count) / (1 + child_state->visit_count));
+}
+
+// 快速对数计算的辅助宏和函数
+#define LOG_POLY_DEGREE 6
+
+#define POLY0(x, c0) _mm_set1_ps(c0)
+#define POLY1(x, c0, c1) _mm_add_ps(_mm_mul_ps(POLY0(x, c1), x), _mm_set1_ps(c0))
+#define POLY2(x, c0, c1, c2) _mm_add_ps(_mm_mul_ps(POLY1(x, c1, c2), x), _mm_set1_ps(c0))
+#define POLY3(x, c0, c1, c2, c3) _mm_add_ps(_mm_mul_ps(POLY2(x, c1, c2, c3), x), _mm_set1_ps(c0))
+#define POLY4(x, c0, c1, c2, c3, c4) _mm_add_ps(_mm_mul_ps(POLY3(x, c1, c2, c3, c4), x), _mm_set1_ps(c0))
+#define POLY5(x, c0, c1, c2, c3, c4, c5) _mm_add_ps(_mm_mul_ps(POLY4(x, c1, c2, c3, c4, c5), x), _mm_set1_ps(c0))
+
+/**
+ * 快速log2计算（SIMD版本）
+ * 使用多项式近似
+ */
+__m128 fast_log2_simd(__m128 x) {
+    __m128i exponent_mask = _mm_set1_epi32(0x7F800000);
+    __m128i mantissa_mask = _mm_set1_epi32(0x007FFFFF);
+    __m128 one = _mm_set1_ps(1.0f);
+    __m128i integer_representation = _mm_castps_si128(x);
+
+    // 提取指数部分
+    __m128 exponent = _mm_cvtepi32_ps(
+        _mm_sub_epi32(
+            _mm_srli_epi32(_mm_and_si128(integer_representation, exponent_mask), 23),
+            _mm_set1_epi32(127)
+        )
+    );
+
+    // 提取尾数部分并归一化到[1,2)
+    __m128 mantissa = _mm_or_ps(_mm_castsi128_ps(_mm_and_si128(integer_representation, mantissa_mask)), one);
+    __m128 polynomial_result;
+
+    // 多项式近似（不同阶数选择）
+#if LOG_POLY_DEGREE == 6
+    polynomial_result = POLY5(mantissa, 3.1157899f, -3.3241990f, 2.5988452f, -1.2315303f, 3.1821337e-1f, -3.4436006e-2f);
+#elif LOG_POLY_DEGREE == 5
+    polynomial_result = POLY4(mantissa, 2.8882704548164776201f, -2.52074962577807006663f,
+        1.48116647521213171641f, -0.465725644288844778798f, 0.0596515482674574969533f);
+#elif LOG_POLY_DEGREE == 4
+    polynomial_result = POLY3(mantissa, 2.61761038894603480148f, -1.75647175389045657003f,
+        0.688243882994381274313f, -0.107254423828329604454f);
+#elif LOG_POLY_DEGREE == 3
+    polynomial_result = POLY2(mantissa, 2.28330284476918490682f, -1.04913055217340124191f, 0.204446009836232697516f);
+#else
+#error "未定义的LOG_POLY_DEGREE"
+#endif
+
+    // 调整多项式确保log2(1)=0
+    polynomial_result = _mm_mul_ps(polynomial_result, _mm_sub_ps(mantissa, one));
+    return _mm_add_ps(polynomial_result, exponent);
+}
+
+/**
+ * 快速自然对数计算（SIMD版本）
+ * 将4个整数转换为自然对数
+ */
+__m256d fast_natural_logarithm(uint32_t v0, uint32_t v1, uint32_t v2, uint32_t v3) {
+    return _mm256_cvtps_pd(
+        _mm_div_ps(
+            fast_log2_simd(_mm_cvtepi32_ps(_mm_set_epi32(v0, v1, v2, v3))),
+            fast_log2_simd(_mm_set1_ps(2.718281828459045))
+        )
+    );
+}
+
+/**
+ * 使用SIMD加速选择UCT值最大的子节点
+ * @param child_nodes 子节点数组起始指针
+ * @param child_count 子节点数量
+ * @return 具有最大UCT值的子节点指针
+ */
+__inline GameState* select_best_child_uct_simd(GameState* child_nodes, int64_t child_count) {
+    __m256d max_uct_value = { 0 };
+    __m256d max_node_address = { 0 };
+    double best_uct_value = 0;
+    GameState* best_child_node = NULL;
+    double uct_values[4];
+
+    // 使用AVX2处理4个节点一组
+    if (child_count >= 4) {
+        for (; child_count >= 4; child_count -= 4) {
+            // 计算分母: 1 + visit_count
+            __m256d denominator = _mm256_cvtepi32_pd(_mm_add_epi32(
+                _mm_set_epi32(child_nodes[0].visit_count, child_nodes[1].visit_count,
+                    child_nodes[2].visit_count, child_nodes[3].visit_count),
+                _mm_set1_epi32(1)
+            ));
+
+            // 计算UCT值: Q/(1+N) + C*sqrt(ln(Np)/(1+N))
+            __m256d current_uct_value = _mm256_add_pd(
+                _mm256_div_pd(
+                    _mm256_set_pd(child_nodes[0].win_rate_estimate, child_nodes[1].win_rate_estimate,
+                        child_nodes[2].win_rate_estimate, child_nodes[3].win_rate_estimate),
+                    denominator
+                ),
+                _mm256_mul_pd(
+                    _mm256_set1_pd(g_uct_exploration_constant),
+                    _mm256_sqrt_pd(
+                        _mm256_div_pd(
+                            fast_natural_logarithm(child_nodes[0].parent_node->visit_count,
+                                child_nodes[1].parent_node->visit_count,
+                                child_nodes[2].parent_node->visit_count,
+                                child_nodes[3].parent_node->visit_count),
+                            denominator
+                        )
+                    )
+                )
+            );
+
+            // 保存节点地址
+            __m256d node_addresses = _mm256_castsi256_pd(
+                _mm256_set_epi64x((uint64_t)child_nodes, (uint64_t)(child_nodes + 1),
+                    (uint64_t)(child_nodes + 2), (uint64_t)(child_nodes + 3))
+            );
+
+            // 比较并选择最大值
+            __m256d comparison_mask = _mm256_cmp_pd(current_uct_value, max_uct_value, _CMP_GT_OQ);
+            max_uct_value = _mm256_blendv_pd(max_uct_value, current_uct_value, comparison_mask);
+            max_node_address = _mm256_blendv_pd(max_node_address, node_addresses, comparison_mask);
+
+            child_nodes += 4;
+        }
+
+        // 提取SIMD寄存器中的结果
+        _mm256_storeu_pd(uct_values, max_uct_value);
+
+        // 找出4个值中的最大值
+        if (uct_values[0] > best_uct_value) {
+            best_uct_value = uct_values[0];
+            best_child_node = (GameState*)_mm256_extract_epi64(_mm256_castpd_si256(max_node_address), 0);
+        }
+        if (uct_values[1] > best_uct_value) {
+            best_uct_value = uct_values[1];
+            best_child_node = (GameState*)_mm256_extract_epi64(_mm256_castpd_si256(max_node_address), 1);
+        }
+        if (uct_values[2] > best_uct_value) {
+            best_uct_value = uct_values[2];
+            best_child_node = (GameState*)_mm256_extract_epi64(_mm256_castpd_si256(max_node_address), 2);
+        }
+        if (uct_values[3] > best_uct_value) {
+            best_uct_value = uct_values[3];
+            best_child_node = (GameState*)_mm256_extract_epi64(_mm256_castpd_si256(max_node_address), 3);
+        }
+    }
+
+    // 处理剩余节点
+    while (child_count > 0) {
+        double current_uct = calculate_uct_value(child_nodes);
+        if (current_uct >= best_uct_value) {
+            best_uct_value = current_uct;
+            best_child_node = child_nodes;
+        }
+        child_nodes++;
+        --child_count;
+    }
+
+    return best_child_node;
+}
+
+/**
+ * 扩展节点：为叶子节点生成所有子节点（整合哈希）
+ * @param game_state 要扩展的节点
+ * @param next_player 下一个行动的玩家
+ */
+__inline void expand_node_with_hash(GameState* game_state, int next_player) {
+    // 检查是否是终局状态
+    if (game_state->piece_position[0] != 0xffffffffffffffff) {
+        generate_all_moves_with_hash(game_state, next_player);
+
+        // 如果无棋可走，创建终局节点
+        if (game_state->child_nodes == NULL) {
+            game_state->child_nodes = allocate_game_state();
+            game_state->child_node_count = 1;
+
+            game_state->child_nodes->piece_position[0] = 0xffffffffffffffff;  // 终局标记
+            game_state->child_nodes->parent_node = game_state;
+            game_state->child_nodes->win_rate_estimate = 0;  // 终局价值为0（输）
+            game_state->child_nodes->zobrist_hash = 0;     // 终局不需要哈希
+        }
+    }
+}
+
+/**
+ * 选择阶段：从根节点到叶子节点选择路径
+ * @param leaf_node 起始节点（通常是根节点）
+ * @param next_player 输出：到达叶子节点时的玩家
+ * @return 选择的叶子节点
+ */
+__inline GameState* select_leaf_node_with_hash(GameState* leaf_node, int* next_player) {
+    while (leaf_node->child_nodes) {
+        leaf_node = select_best_child_uct_simd(leaf_node->child_nodes, leaf_node->child_node_count);
+        *next_player = 1 - *next_player;  // 切换玩家
+    }
+    return leaf_node;
+}
+
+/**
+ * 回传阶段：将模拟结果沿路径回传更新统计信息
+ * @param game_state 叶子节点（模拟开始的节点）
+ * @param next_player 模拟时的玩家（未使用但保留接口）
+ */
+__inline void backpropagate_result(GameState* game_state, int* next_player) {
+    double simulation_value = game_state->win_rate_estimate;
+
+    // 更新叶子节点
+    game_state->visit_count++;
+    game_state = game_state->parent_node;
+    simulation_value = 1 - simulation_value;  // 切换视角（对手的价值是1-己方价值）
+
+    // 沿路径向上更新所有祖先节点
+    while (game_state) {
+        game_state->visit_count++;
+        game_state->win_rate_estimate += simulation_value;
+
+        game_state = game_state->parent_node;
+        simulation_value = 1 - simulation_value;  // 每层切换视角
+    }
+}
+
+/**
+ * 主MCTS搜索函数（整合开局库）
+ * @param root_node 根节点（当前局面）
+ * @param current_hash_value 当前棋盘的哈希值
+ */
+__inline void perform_mcts_search_with_opening(GameState* root_node, uint64_t current_hash_value) {
+    // 首先检查开局库
+    OpeningBookEntry* opening_entry = NULL;
+    if (lookup_opening_book(current_hash_value, &opening_entry)) {
+        int from_x, from_y, to_x, to_y, arrow_x, arrow_y;
+        if (choose_opening_move(opening_entry, &from_x, &from_y, &to_x, &to_y, &arrow_x, &arrow_y)) {
+            // 输出开局库走法
+            printf("%d %d %d %d %d %d\n", from_x, from_y, to_x, to_y, arrow_x, arrow_y);
+            printf("elapse: 0.000000, ");  // 开局库立即返回
+            printf("iterator: 0, ");       // 没有进行MCTS搜索
+            printf("evaluate: 0, ");       // 没有进行评估
+            printf("call_uct_count: 0 \n"); // 没有调用UCT
+            printf("info: opening book move\n"); // 额外信息
+            return;
+        }
+    }
+
+    // 如果没有在开局库中找到，执行原来的MCTS搜索
+    GameState* leaf_node, * selected_action = NULL;
+    uint64_t position_difference;
+    uint8_t start_position, target_position, arrow_position;
+    uint32_t max_visit_count = 0;
+    int next_player, iteration_count = 0;
+
+    g_search_start_time = clock();  // 开始计时
+
+    // 确保根节点有哈希值
+    if (root_node->zobrist_hash == 0) {
+        root_node->zobrist_hash = current_hash_value;
+    }
+
+    // 主搜索循环
+    for (; !is_search_timeout();) {
+        next_player = g_current_player;
+
+        // 1. 选择阶段
+        leaf_node = select_leaf_node_with_hash(root_node, &next_player);
+
+        // 2. 扩展阶段（如果节点已被访问过）
+        if (leaf_node->visit_count) {
+            expand_node_with_hash(leaf_node, next_player);
+            leaf_node = select_leaf_node_with_hash(leaf_node, &next_player);
+        }
+
+        // 3. 回传阶段
+        backpropagate_result(leaf_node, &next_player);
+        iteration_count++;
+    }
+
+    // 4. 决策阶段：选择访问次数最多的子节点
+    GameState* current_child = root_node->child_nodes;
+    for (uint32_t i = 0; i < root_node->child_node_count; i++, current_child++) {
+        if (selected_action == NULL || current_child->visit_count > max_visit_count) {
+            max_visit_count = current_child->visit_count;
+            selected_action = current_child;
+        }
+    }
+
+    // 解码走法信息
+    position_difference = root_node->piece_position[g_current_player] ^ selected_action->piece_position[g_current_player];
+    start_position = __builtin_ctzll(root_node->piece_position[g_current_player] & position_difference);      // 起始位置
+    target_position = __builtin_ctzll(selected_action->piece_position[g_current_player] & position_difference);   // 目标位置
+    arrow_position = __builtin_ctzll(root_node->board_bitmap ^ position_difference ^ selected_action->board_bitmap);  // 箭的位置
+
+    // 输出走法（棋盘坐标）
+    printf("%d %d %d %d %d %d\n",
+        start_position & 0x7,        // x1
+        start_position >> 3,         // y1
+        target_position & 0x7,       // x2
+        target_position >> 3,        // y2
+        arrow_position & 0x7,        // x3
+        arrow_position >> 3          // y3
+    );
+
+    // 输出调试信息
+    printf("elapse: %lf, ", (clock() - g_search_start_time) * 1.0 / CLOCKS_PER_SEC);
+    printf("iterator: %d, ", iteration_count);
+    printf("evaluate: %d, ", g_evaluation_counter);
+    printf("call_uct_count: %" PRIu64 " \n", g_uct_calculation_counter);
+    printf("info: mcts move\n"); // 额外信息
+}
+
+// ====================================================
+// 棋盘操作和主函数
+// ====================================================
+
+/**
+ * 执行一步走法（增加哈希更新）
+ * @param game_state 当前状态
+ * @param from_x,from_y 起始位置
+ * @param to_x,to_y 目标位置
+ * @param arrow_x,arrow_y 箭的位置
+ * @param moving_player 执行走法的玩家
+ * @param current_player 当前玩家
+ * @param previous_hash 旧的哈希值
+ * @return 新的哈希值
+ */
+uint64_t apply_move_with_hash(GameState* game_state, int from_x, int from_y, int to_x, int to_y, int arrow_x, int arrow_y,
+    int moving_player, int current_player, uint64_t previous_hash) {
+    assert(0 == ((~0x7) & (from_x | to_x | arrow_x | from_y | to_y | arrow_y)));  // 坐标必须在0-7范围内
+
+    int from_position = (from_y << 3) | from_x;
+    int to_position = (to_y << 3) | to_x;
+    int arrow_position = (arrow_y << 3) | arrow_x;
+    int piece_type = (moving_player == PLAYER_BLACK) ? 1 : 2;
+
+    // 更新棋盘位图：移除起始位置，添加目标位置和箭
+    game_state->board_bitmap ^= (1ull << from_position) ^
+        (1ull << to_position) ^
+        (1ull << arrow_position);
+
+    // 更新棋子位置：移动棋子
+    game_state->piece_position[moving_player] ^= (1ull << from_position) ^
+        (1ull << to_position);
+
+    // 更新哈希值
+    return update_board_hash(previous_hash, from_position, to_position, arrow_position,
+        piece_type, current_player, 1 - current_player);
+}
+
+/**
+ * 主函数
+ * 读取输入，初始化棋盘，执行MCTS搜索
+ */
+int main(int argc, char* argv[]) {
+    GameState initial_state = { 0 };
+    int current_turn_id;
+
+    // 初始化Zobrist哈希
+    initialize_zobrist();
+
+    // 内置开局库始终可用
+    g_opening_book_available = true;
+
+    // 初始化棋盘（标准起始位置）
+    // 黑棋位置: (2,0), (5,0), (0,2), (7,2)
+    initial_state.board_bitmap |= (1ull << 2) | (1ull << 5) | (1ull << 16) | (1ull << 23);
+    initial_state.piece_position[PLAYER_BLACK] = initial_state.board_bitmap;
+
+    // 白棋位置: (0,5), (7,5), (2,7), (5,7)
+    initial_state.board_bitmap |= (1ull << 40) | (1ull << 47) | (1ull << 58) | (1ull << 61);
+    initial_state.piece_position[PLAYER_WHITE] = initial_state.board_bitmap ^ initial_state.piece_position[PLAYER_BLACK];
+
+    // 当前哈希值
+    uint64_t current_hash_value = 0;
+
+    // 读取回合信息
+    if (scanf("%d", &current_turn_id) != 1) {
+        fprintf(stderr, "Error reading turnID\n");
+        return 1;
+    }
+    g_current_player = PLAYER_WHITE;  // 默认白方开始
+
+    // 第一回合时间加倍
+    if (current_turn_id == 1) {
+        g_max_search_time_us <<= 1;
+    }
+
+    // 回放历史走法
+    for (int turn = 0; turn < current_turn_id; turn++) {
+        int from_x, from_y, to_x, to_y, arrow_x, arrow_y;
+        if (scanf("%d%d%d%d%d%d", &from_x, &from_y, &to_x, &to_y, &arrow_x, &arrow_y) != 6) {
+            fprintf(stderr, "Error reading move coordinates at turn %d\n", turn);
+            return 1;
+        }
+
+        if (from_x == -1) {
+            g_current_player = PLAYER_BLACK;  // 第一回合收到(-1,-1)，说明我是黑方
+            // 计算初始哈希值（白方先手）
+            current_hash_value = calculate_board_hash(&initial_state, PLAYER_WHITE);
+        }
+        else {
+            // 更新哈希并移动棋子
+            int opponent_player = 1 - g_current_player;
+            current_hash_value = apply_move_with_hash(&initial_state, from_x, from_y, to_x, to_y, arrow_x, arrow_y,
+                opponent_player, opponent_player, current_hash_value);
+        }
+
+        if (turn < current_turn_id - 1) {
+            if (scanf("%d%d%d%d%d%d", &from_x, &from_y, &to_x, &to_y, &arrow_x, &arrow_y) != 6) {
+                fprintf(stderr, "Error reading my move coordinates at turn %d\n", turn);
+                return 1;
+            }
+            if (from_x >= 0) {
+                // 更新哈希并移动棋子
+                current_hash_value = apply_move_with_hash(&initial_state, from_x, from_y, to_x, to_y, arrow_x, arrow_y,
+                    g_current_player, g_current_player, current_hash_value);
+            }
+        }
+    }
+
+    // 如果是第一回合且我是黑方，需要计算初始哈希值
+    if (current_turn_id == 1 && g_current_player == PLAYER_BLACK && current_hash_value == 0) {
+        current_hash_value = calculate_board_hash(&initial_state, g_current_player);
+    }
+
+    // 设置UCT探索常数（随回合数衰减）
+    g_uct_exploration_constant = 0.176999999999 * exp(-0.008 * (current_turn_id - 1.41));
+
+    // 执行带开局库的MCTS搜索
+    initial_state.zobrist_hash = current_hash_value;
+    perform_mcts_search_with_opening(&initial_state, current_hash_value);
+
+    return 0;
+}
+

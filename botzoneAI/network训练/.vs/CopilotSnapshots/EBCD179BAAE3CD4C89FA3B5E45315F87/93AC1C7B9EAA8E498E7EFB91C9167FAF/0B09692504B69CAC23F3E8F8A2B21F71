@@ -1,0 +1,60 @@
+﻿@echo off
+REM 立即启动100轮训练 - 无需按键
+cd /d "%~dp0"
+
+echo ========================================
+echo    100轮自动训练 - 稳定模式 (低优先级、轮间延时)
+echo ========================================
+echo 开始时间: %DATE% %TIME%
+echo 配置: 100轮 x 20种群 x 10代 x 40局
+echo 优化: 降低进程优先级并在每轮后等待30秒以降低并稳定CPU负载
+echo ========================================
+echo.
+
+if not exist iteration_results mkdir iteration_results
+
+REM 循环运行99轮训练（第1轮已完成）
+for /L %%i in (2,1,100) do (
+    echo.
+    echo ########################################
+    echo ### 第 %%i/100 轮
+    echo ########################################
+    echo 开始时间: %DATE% %TIME%
+    echo.
+    
+    REM 使用低优先级启动训练进程并等待其结束
+    echo [第 %%i 轮] 启动训练 (低优先级)...
+    start "trainer" /LOW /WAIT "" ".\bin\x64\Release\trainer.exe" 20 10 40
+    
+    if errorlevel 1 (
+        echo [错误] 训练失败！
+        pause
+        exit /b 1
+    )
+    
+    REM 保存最佳参数
+    if exist best_params_final.txt (
+        copy /Y best_params_final.txt iteration_results\best_params_iter_%%i.txt >nul
+        echo [第 %%i 轮] 参数已保存
+    )
+    
+    REM 应用新参数（如果不是最后一轮）
+    if %%i LSS 100 (
+        powershell -ExecutionPolicy Bypass -File apply_best_params.ps1 >nul 2>&1
+        echo [第 %%i 轮] 参数已应用
+    )
+    
+    echo 结束时间: %DATE% %TIME%
+    echo [第 %%i 轮] 完成！
+    
+    REM 轮间延时，避免持续高负载（可根据需要调整秒数）
+    echo 等待 30 秒以降低负载并稳定训练...
+    timeout /t 30 /nobreak >nul
+)
+
+echo.
+echo ========================================
+echo 训练完成！
+echo ========================================
+powershell -ExecutionPolicy Bypass -File generate_training_report.ps1
+pause
